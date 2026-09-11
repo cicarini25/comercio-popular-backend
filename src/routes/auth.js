@@ -1,10 +1,12 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 function isValidCPF(cpf) {
   cpf = cpf.replace(/\D/g, '');
@@ -94,6 +96,81 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     console.error('Erro no login:', err);
     res.status(500).json({ error: 'Erro ao entrar na conta. Tente novamente.' });
+  }
+});
+
+// POST /api/auth/google — login/cadastro usando a conta do Google
+// O front-end manda o "idToken" que o Google devolve depois do usuário
+// clicar em "Entrar com Google".
+router.post('/google', async (req, res) => {
+  const { idToken, cpf, phone } = req.body;
+
+  if (!idToken) {
+    return res.status(400).json({ error: 'Token do Google ausente.' });
+  }
+
+  let payload;
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch (err) {
+    console.error('Erro ao verificar token do Google:', err);
+    return res.status(401).json({ error: 'Não foi possível validar o login com o Google.' });
+  }
+
+  const googleId = payload.sub;
+  const email = payload.email;
+  const name = payload.name;
+
+  try {
+    // 1) já existe conta vinculada a esse Google?
+    let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
+    let user = result.rows[0];
+
+    // 2) se não, existe conta com o mesmo e-mail (cadastrada com senha)? vincula o Google a ela
+    if (!user) {
+      result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+      user = result.rows[0];
+      if (user) {
+        await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]);
+      }
+    }
+
+    // 3) usuário totalmente novo: precisamos do CPF pra terminar o cadastro
+    if (!user) {
+      if (!cpf) {
+        // o front-end deve mostrar um formulário pedindo CPF (e telefone)
+        // e chamar essa mesma rota de novo, agora enviando o cpf.
+        return res.json({ needsSignupInfo: true, email, name });
+      }
+      if (!isValidCPF(cpf)) {
+        return res.status(400).json({ error: 'CPF inválido.' });
+      }
+
+      const existingCpf = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpf]);
+      if (existingCpf.rows.length > 0) {
+        return res.status(409).json({ error: 'Já existe uma conta com este CPF.' });
+      }
+
+      const insertResult = await pool.query(
+        `INSERT INTO users (name, email, cpf, phone, google_id)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
+        [name, email, cpf, phone || null, googleId]
+      );
+      user = insertResult.rows[0];
+    } else {
+      delete user.password_hash;
+    }
+
+    const token = issueToken(user.id);
+    res.json({ user, token });
+  } catch (err) {
+    console.error('Erro no login com Google:', err);
+    res.status(500).json({ error: 'Erro ao entrar com Google. Tente novamente.' });
   }
 });
 
