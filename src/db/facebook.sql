@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS facebook_identities (
+  facebook_id VARCHAR(255) PRIMARY KEY,
+  user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
