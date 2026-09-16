@@ -63,11 +63,21 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`facebook:${profile.id}`]);
       let { rows: [user] } = await client.query('SELECT u.* FROM users u JOIN facebook_identities f ON f.user_id=u.id WHERE f.facebook_id=$1', [profile.id]);
       if (!user) {
-        if (typeof profile.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email) || profile.email.length > 150) throw fail(400, 'O Facebook não forneceu um e-mail. Entre com Google ou e-mail e senha.');
-        const email = profile.email.toLowerCase();
+        const hasEmail = typeof profile.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email) && profile.email.length <= 150;
+        if (!hasEmail && !body.action) {
+          await client.query('ROLLBACK');
+          return res.json({ status: 'link_required', emailRequired: true, profile: { name: typeof profile.name === 'string' ? profile.name.slice(0,150) : 'Cliente', email: '' } });
+        }
+        // A manually supplied email only selects an EXISTING account. Its password
+        // must be verified before binding the independently verified Facebook ID.
+        if (!hasEmail && (body.action !== 'link' || typeof body.email !== 'string' || body.email.length > 150 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim()))) {
+          throw fail(400, 'Informe o e-mail e a senha da sua conta existente para vincular o Facebook.');
+        }
+        const email = hasEmail ? profile.email.toLowerCase() : body.email.trim().toLowerCase();
         const existing = await client.query('SELECT * FROM users WHERE lower(email)=$1', [email]);
         if (existing.rows.length > 1) throw fail(409, 'Entre com o método original da sua conta.');
         user = existing.rows[0];
+        if (!hasEmail && !user) throw fail(401, 'E-mail ou senha da loja incorretos.');
         const name = typeof profile.name === 'string' ? profile.name.slice(0,150) : 'Cliente';
         if (!body.action) {
           await client.query('ROLLBACK');
