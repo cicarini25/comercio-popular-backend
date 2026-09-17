@@ -45,15 +45,6 @@ export async function verifyFacebook(accessToken, env = process.env, fetcher = f
   return profile;
 }
 
-function validCPF(cpf) {
-  if (!/^\d{11}$/.test(cpf) || /^(\d)\1+$/.test(cpf)) return false;
-  return [9, 10].every((n) => {
-    let sum = 0;
-    for (let i = 0; i < n; i += 1) sum += Number(cpf[i]) * (n + 1 - i);
-    return ((sum * 10) % 11) % 10 === Number(cpf[n]);
-  });
-}
-
 export function createFacebookRouter({ db = pool, verify = verifyFacebook, env = process.env } = {}) {
   const router = express.Router();
   const attempts = new Map();
@@ -79,6 +70,8 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
       client = await db.connect();
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`facebook:${profile.id}`]);
+      await client.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;');
+      await client.query('ALTER TABLE users ALTER COLUMN email DROP NOT NULL;');
 
       let { rows: [user] } = await client.query(
         'SELECT u.* FROM users u JOIN facebook_identities f ON f.user_id=u.id WHERE f.facebook_id=$1',
@@ -94,19 +87,13 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
           ? profile.name.trim().slice(0, 150)
           : 'Cliente';
 
-        // When Facebook supplies an e-mail that already belongs to a normal account,
-        // require the store password before linking the social identity to that account.
         if (hasEmail) {
           const existing = await client.query('SELECT * FROM users WHERE lower(email)=$1', [email]);
           if (existing.rows.length > 1) throw fail(409, 'Entre com o método original da sua conta.');
           user = existing.rows[0];
-
           if (user && !body.action) {
             await client.query('ROLLBACK');
-            return res.json({
-              status: 'link_required',
-              profile: { name, email },
-            });
+            return res.json({ status: 'link_required', profile: { name, email } });
           }
         }
 
@@ -118,7 +105,6 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
           }
           if (!await bcrypt.compare(body.password, user.password_hash)) throw fail(401, 'Senha da loja incorreta.');
         } else {
-          // First Facebook access creates the Commerce Popular identity immediately.
           const result = await client.query(
             `INSERT INTO users(name,email,password_hash,cpf,phone)
              VALUES($1,$2,NULL,NULL,NULL)
