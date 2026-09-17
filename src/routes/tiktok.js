@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool.js';
+import { ensureLegalSchema, socialAuthResponse } from './legal.js';
 
 const router = express.Router();
 
@@ -31,7 +32,9 @@ async function ensureSchema() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_open_id VARCHAR(255) UNIQUE;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_display_name VARCHAR(150);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_avatar_url TEXT;
-
+  `);
+  await ensureLegalSchema();
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tiktok_oauth_states (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       state_hash VARCHAR(64) UNIQUE NOT NULL,
@@ -93,10 +96,6 @@ function clearOAuthCookie(res) {
 
 function redirectToFrontend(path) {
   return `${frontendUrl().replace(/\/$/, '')}${path}`;
-}
-
-function issueToken(userId) {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
 }
 
 async function getTikTokUser(accessToken, fallbackOpenId) {
@@ -238,7 +237,8 @@ router.post('/tiktok/exchange', async (req, res) => {
 
     const handoff = result.rows[0];
     let userResult = await pool.query(
-      `SELECT id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller
+      `SELECT id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller,
+              legal_accepted_at, legal_version
        FROM users WHERE tiktok_open_id = $1`,
       [handoff.tiktok_open_id],
     );
@@ -248,23 +248,31 @@ router.post('/tiktok/exchange', async (req, res) => {
         userResult = await pool.query(
           `INSERT INTO users (name, email, password_hash, cpf, phone, tiktok_open_id, tiktok_display_name, tiktok_avatar_url)
            VALUES ($1, NULL, NULL, NULL, NULL, $2, $3, $4)
-           RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
+           RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller,
+                     legal_accepted_at, legal_version`,
           [handoff.display_name || 'Cliente TikTok', handoff.tiktok_open_id, handoff.display_name, handoff.avatar_url],
         );
       } catch (err) {
         if (err.code !== '23505') throw err;
         userResult = await pool.query(
-          `SELECT id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller
+          `SELECT id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller,
+                  legal_accepted_at, legal_version
            FROM users WHERE tiktok_open_id = $1`,
           [handoff.tiktok_open_id],
         );
       }
     }
 
-    const user = userResult.rows[0];
+    let user = userResult.rows[0];
     if (!user) return res.status(500).json({ error: 'Não foi possível criar a identidade do TikTok.' });
-    const token = issueToken(user.id);
-    return res.json({ status: 'authenticated', user, token });
+
+    await pool.query(
+      `UPDATE users SET tiktok_display_name = $1, tiktok_avatar_url = $2 WHERE id = $3`,
+      [handoff.display_name, handoff.avatar_url, user.id],
+    );
+    user = { ...user, tiktok_display_name: handoff.display_name, tiktok_avatar_url: handoff.avatar_url };
+
+    return res.json(await socialAuthResponse(user, 'TikTok'));
   } catch (err) {
     console.error('Erro ao concluir exchange do TikTok:', err);
     return res.status(500).json({ error: 'Erro ao processar o login com TikTok.' });
