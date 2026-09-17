@@ -4,6 +4,7 @@ import cors from 'cors';
 import authRoutes from './routes/auth.js';
 import facebookRoutes from './routes/facebook.js';
 import orderRoutes from './routes/orders.js';
+import tiktokRoutes from './routes/tiktok.js';
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth/facebook', facebookRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', tiktokRoutes);
 app.use('/api/orders', orderRoutes);
 
 const PORT = process.env.PORT || 3333;
