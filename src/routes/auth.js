@@ -27,7 +27,12 @@ function issueToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
 }
 
-// POST /api/auth/signup — cadastro tradicional continua exigindo identidade completa.
+async function ensureSocialSchema() {
+  await pool.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;');
+  await pool.query('ALTER TABLE users ALTER COLUMN email DROP NOT NULL;');
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;');
+}
+
 router.post('/signup', async (req, res) => {
   const { name, email, password, cpf, phone } = req.body;
 
@@ -53,7 +58,6 @@ router.post('/signup', async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-
     const result = await pool.query(
       `INSERT INTO users (name, email, password_hash, cpf, phone)
        VALUES ($1, $2, $3, $4, $5)
@@ -63,7 +67,6 @@ router.post('/signup', async (req, res) => {
 
     const user = result.rows[0];
     const token = issueToken(user.id);
-
     res.status(201).json({ user, token });
   } catch (err) {
     console.error('Erro no cadastro:', err);
@@ -71,7 +74,6 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// POST /api/auth/login — login tradicional por e-mail/senha.
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -94,7 +96,6 @@ router.post('/login', async (req, res) => {
 
     const token = issueToken(user.id);
     delete user.password_hash;
-
     res.json({ user, token });
   } catch (err) {
     console.error('Erro no login:', err);
@@ -102,13 +103,9 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// POST /api/auth/google — primeiro acesso social entra direto e recebe uma conta Comércio Popular.
 router.post('/google', async (req, res) => {
   const { idToken } = req.body || {};
-
-  if (!idToken) {
-    return res.status(400).json({ error: 'Token do Google ausente.' });
-  }
+  if (!idToken) return res.status(400).json({ error: 'Token do Google ausente.' });
 
   let payload;
   try {
@@ -136,15 +133,14 @@ router.post('/google', async (req, res) => {
   }
 
   try {
+    await ensureSocialSchema();
     let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
     let user = result.rows[0];
 
     if (!user && email) {
       result = await pool.query('SELECT * FROM users WHERE lower(email) = $1', [email]);
       user = result.rows[0];
-      if (user) {
-        await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]);
-      }
+      if (user) await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]);
     }
 
     if (!user) {
@@ -158,15 +154,14 @@ router.post('/google', async (req, res) => {
     }
 
     const token = issueToken(user.id);
-    res.json({ status: 'authenticated', user, token });
+    return res.json({ status: 'authenticated', user, token });
   } catch (err) {
     console.error('Erro no login com Google:', err);
     const status = err.code === '23505' ? 409 : 500;
-    res.status(status).json({ error: status === 409 ? 'Esta identidade já está vinculada a outra conta.' : 'Erro ao entrar com Google. Tente novamente.' });
+    return res.status(status).json({ error: status === 409 ? 'Esta identidade já está vinculada a outra conta.' : 'Erro ao entrar com Google. Tente novamente.' });
   }
 });
 
-// GET /api/auth/me — retorna os dados do usuário logado a partir do token
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
