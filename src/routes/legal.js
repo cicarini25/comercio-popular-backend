@@ -19,19 +19,34 @@ export function issueLegalPendingToken(userId, provider) {
   );
 }
 
+function safeUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: typeof user.email === 'string' ? user.email : '',
+    cpf: user.cpf || '',
+    phone: user.phone || '',
+    is_verified_face: user.is_verified_face === true,
+    is_verified_sms: user.is_verified_sms === true,
+    is_seller: user.is_seller === true,
+  };
+}
+
 export async function socialAuthResponse(user, provider, db = pool) {
   await ensureLegalSchema(db);
+  const userForResponse = safeUser(user);
+
   if (!user.legal_accepted_at || user.legal_version !== CURRENT_LEGAL_VERSION) {
     return {
       status: 'legal_required',
       legalToken: issueLegalPendingToken(user.id, provider),
-      user,
+      user: userForResponse,
       legalVersion: CURRENT_LEGAL_VERSION,
     };
   }
 
   const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
-  return { status: 'authenticated', token, user };
+  return { status: 'authenticated', token, user: userForResponse };
 }
 
 const router = express.Router();
