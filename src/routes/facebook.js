@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { createHmac } from 'node:crypto';
 import pool from '../db/pool.js';
+import { ensureLegalSchema, socialAuthResponse } from './legal.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
@@ -72,6 +73,7 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`facebook:${profile.id}`]);
       await client.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;');
       await client.query('ALTER TABLE users ALTER COLUMN email DROP NOT NULL;');
+      await ensureLegalSchema(client);
 
       let { rows: [user] } = await client.query(
         'SELECT u.* FROM users u JOIN facebook_identities f ON f.user_id=u.id WHERE f.facebook_id=$1',
@@ -120,14 +122,9 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
         );
       }
 
-      const token = jwt.sign({ userId: user.id }, env.JWT_SECRET, { expiresIn: '30d' });
+      const auth = await socialAuthResponse(user, 'Facebook', client);
       await client.query('COMMIT');
-      const { id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller } = user;
-      return res.json({
-        status: 'authenticated',
-        token,
-        user: { id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller },
-      });
+      return res.json(auth);
     } catch (error) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       const status = error.code === '23505' ? 409 : error.status || 500;
