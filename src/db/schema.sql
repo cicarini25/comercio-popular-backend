@@ -1,17 +1,22 @@
 -- Comércio Popular — Schema inicial do banco de dados (PostgreSQL)
 
 CREATE TABLE IF NOT EXISTS users (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name            VARCHAR(150) NOT NULL,
-  email           VARCHAR(150) UNIQUE,
-  password_hash   VARCHAR(255),
-  google_id       VARCHAR(255) UNIQUE,
-  cpf             VARCHAR(14) UNIQUE,
-  phone           VARCHAR(20),
-  is_verified_face BOOLEAN DEFAULT FALSE,
-  is_verified_sms  BOOLEAN DEFAULT FALSE,
-  is_seller       BOOLEAN DEFAULT FALSE,
-  created_at      TIMESTAMPTZ DEFAULT now()
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name              VARCHAR(150) NOT NULL,
+  email             VARCHAR(150) UNIQUE,
+  password_hash     VARCHAR(255),
+  google_id         VARCHAR(255) UNIQUE,
+  tiktok_open_id    VARCHAR(255) UNIQUE,
+  tiktok_display_name VARCHAR(150),
+  tiktok_avatar_url TEXT,
+  cpf               VARCHAR(14) UNIQUE,
+  phone             VARCHAR(20),
+  is_verified_face   BOOLEAN DEFAULT FALSE,
+  is_verified_sms    BOOLEAN DEFAULT FALSE,
+  is_seller          BOOLEAN DEFAULT FALSE,
+  legal_accepted_at  TIMESTAMPTZ,
+  legal_version      VARCHAR(32),
+  created_at         TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS sellers (
@@ -75,11 +80,11 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
-
--- Login com TikTok.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_open_id VARCHAR(255) UNIQUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_display_name VARCHAR(150);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_accepted_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_version VARCHAR(32);
 
 CREATE TABLE IF NOT EXISTS tiktok_oauth_states (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
