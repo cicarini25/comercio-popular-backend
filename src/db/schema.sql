@@ -78,3 +78,27 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 -- garantem que o banco já publicado também receba as mudanças.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
+-- Login com TikTok (OAuth 2.0 / Login Kit).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_open_id VARCHAR(255) UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_display_name VARCHAR(150);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_avatar_url TEXT;
+
+CREATE TABLE IF NOT EXISTS tiktok_oauth_states (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  state_hash VARCHAR(64) UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tiktok_oauth_handoffs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code_hash VARCHAR(64) UNIQUE NOT NULL,
+  tiktok_open_id VARCHAR(255) NOT NULL,
+  display_name VARCHAR(150),
+  avatar_url TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_tiktok_oauth_states_expires ON tiktok_oauth_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_tiktok_oauth_handoffs_expires ON tiktok_oauth_handoffs(expires_at);
