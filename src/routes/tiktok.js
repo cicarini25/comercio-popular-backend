@@ -27,6 +27,7 @@ function requireConfig() {
 async function ensureSchema() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
   await pool.query(`
+    ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_open_id VARCHAR(255) UNIQUE;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_display_name VARCHAR(150);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_avatar_url TEXT;
@@ -71,7 +72,7 @@ function parseCookies(req) {
         return index === -1
           ? [part, '']
           : [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
-      })
+      }),
   );
 }
 
@@ -98,40 +99,10 @@ function issueToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
 }
 
-function signTikTokSignupToken(tiktokOpenId) {
-  return jwt.sign(
-    { purpose: 'tiktok_signup', tiktokOpenId },
-    process.env.JWT_SECRET,
-    { expiresIn: '10m' }
-  );
-}
-
-function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
-}
-
-function isValidCPF(cpf) {
-  cpf = String(cpf || '').replace(/\D/g, '');
-  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-  let sum = 0;
-  for (let i = 0; i < 9; i += 1) sum += Number(cpf[i]) * (10 - i);
-  let digit1 = (sum * 10) % 11;
-  if (digit1 === 10) digit1 = 0;
-  if (digit1 !== Number(cpf[9])) return false;
-  sum = 0;
-  for (let i = 0; i < 10; i += 1) sum += Number(cpf[i]) * (11 - i);
-  let digit2 = (sum * 10) % 11;
-  if (digit2 === 10) digit2 = 0;
-  return digit2 === Number(cpf[10]);
-}
-
 async function getTikTokUser(accessToken, fallbackOpenId) {
   const url = new URL(TIKTOK_USER_INFO_URL);
   url.searchParams.set('fields', 'open_id,display_name,avatar_url');
-
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok || (data?.error?.code && data.error.code !== 'ok')) {
@@ -146,7 +117,6 @@ async function getTikTokUser(accessToken, fallbackOpenId) {
   };
 }
 
-// GET /api/auth/tiktok — inicia o Login Kit Web.
 router.get('/tiktok', async (_req, res) => {
   try {
     requireConfig();
@@ -154,8 +124,8 @@ router.get('/tiktok', async (_req, res) => {
 
     const state = randomToken();
     await pool.query(
-      `INSERT INTO tiktok_oauth_states (state_hash, expires_at) VALUES ($1, $2)`,
-      [sha256(state), new Date(Date.now() + STATE_TTL_MS)]
+      'INSERT INTO tiktok_oauth_states (state_hash, expires_at) VALUES ($1, $2)',
+      [sha256(state), new Date(Date.now() + STATE_TTL_MS)],
     );
     setOAuthCookie(res, state);
 
@@ -165,7 +135,6 @@ router.get('/tiktok', async (_req, res) => {
     url.searchParams.set('scope', 'user.info.basic');
     url.searchParams.set('redirect_uri', process.env.TIKTOK_REDIRECT_URI);
     url.searchParams.set('state', state);
-
     return res.redirect(url.toString());
   } catch (err) {
     console.error('Erro ao iniciar login TikTok:', err);
@@ -173,7 +142,6 @@ router.get('/tiktok', async (_req, res) => {
   }
 });
 
-// GET /api/auth/tiktok/callback — callback registrado no TikTok.
 router.get('/tiktok/callback', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
@@ -187,10 +155,7 @@ router.get('/tiktok/callback', async (req, res) => {
     });
     return res.redirect(redirectToFrontend(`/login?${params.toString()}`));
   }
-
-  if (!code || !state) {
-    return res.status(400).send('Callback do TikTok inválido: code/state ausente.');
-  }
+  if (!code || !state) return res.status(400).send('Callback do TikTok inválido: code/state ausente.');
 
   try {
     requireConfig();
@@ -202,14 +167,11 @@ router.get('/tiktok/callback', async (req, res) => {
     const stateMatches = expectedState.length === receivedState.length
       && crypto.timingSafeEqual(expectedState, receivedState);
     clearOAuthCookie(res);
-
-    if (!stateMatches) {
-      return res.status(400).send('Callback do TikTok inválido: estado da sessão não confere.');
-    }
+    if (!stateMatches) return res.status(400).send('Callback do TikTok inválido: estado da sessão não confere.');
 
     const stateResult = await pool.query(
-      `DELETE FROM tiktok_oauth_states WHERE state_hash = $1 AND expires_at > now() RETURNING id`,
-      [sha256(String(state))]
+      'DELETE FROM tiktok_oauth_states WHERE state_hash = $1 AND expires_at > now() RETURNING id',
+      [sha256(String(state))],
     );
     if (stateResult.rowCount !== 1) {
       const params = new URLSearchParams({
@@ -221,10 +183,7 @@ router.get('/tiktok/callback', async (req, res) => {
 
     const tokenResponse = await fetch(TIKTOK_TOKEN_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cache-Control': 'no-cache',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
       body: new URLSearchParams({
         client_key: process.env.TIKTOK_CLIENT_KEY,
         client_secret: clientSecret(),
@@ -233,7 +192,6 @@ router.get('/tiktok/callback', async (req, res) => {
         redirect_uri: process.env.TIKTOK_REDIRECT_URI,
       }),
     });
-
     const tokenData = await tokenResponse.json().catch(() => ({}));
     if (!tokenResponse.ok || !tokenData?.open_id || !tokenData?.access_token) {
       console.error('Resposta de token TikTok:', tokenData);
@@ -248,13 +206,7 @@ router.get('/tiktok/callback', async (req, res) => {
       `INSERT INTO tiktok_oauth_handoffs
        (code_hash, tiktok_open_id, display_name, avatar_url, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
-      [
-        sha256(handoff),
-        tiktokUser.openId,
-        tiktokUser.displayName,
-        tiktokUser.avatarUrl,
-        new Date(Date.now() + HANDOFF_TTL_MS),
-      ]
+      [sha256(handoff), tiktokUser.openId, tiktokUser.displayName, tiktokUser.avatarUrl, new Date(Date.now() + HANDOFF_TTL_MS)],
     );
 
     const params = new URLSearchParams({ oauth: 'tiktok', code: handoff });
@@ -269,7 +221,6 @@ router.get('/tiktok/callback', async (req, res) => {
   }
 });
 
-// POST /api/auth/tiktok/exchange — troca o handoff de uso único por uma sessão Comércio Popular.
 router.post('/tiktok/exchange', async (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'Código do TikTok ausente.' });
@@ -281,98 +232,42 @@ router.post('/tiktok/exchange', async (req, res) => {
        SET used_at = now()
        WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now()
        RETURNING tiktok_open_id, display_name, avatar_url`,
-      [sha256(String(code))]
+      [sha256(String(code))],
     );
-
-    if (result.rowCount !== 1) {
-      return res.status(401).json({ error: 'Código do login TikTok inválido ou expirado.' });
-    }
+    if (result.rowCount !== 1) return res.status(401).json({ error: 'Código do login TikTok inválido ou expirado.' });
 
     const handoff = result.rows[0];
-    const userResult = await pool.query(
+    let userResult = await pool.query(
       `SELECT id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller
        FROM users WHERE tiktok_open_id = $1`,
-      [handoff.tiktok_open_id]
+      [handoff.tiktok_open_id],
     );
 
-    if (userResult.rowCount === 1) {
-      const user = userResult.rows[0];
-      await pool.query(
-        `UPDATE users SET tiktok_display_name = $1, tiktok_avatar_url = $2 WHERE id = $3`,
-        [handoff.display_name, handoff.avatar_url, user.id]
-      );
-      return res.json({ user, token: issueToken(user.id) });
+    if (userResult.rowCount === 0) {
+      try {
+        userResult = await pool.query(
+          `INSERT INTO users (name, email, password_hash, cpf, phone, tiktok_open_id, tiktok_display_name, tiktok_avatar_url)
+           VALUES ($1, NULL, NULL, NULL, NULL, $2, $3, $4)
+           RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
+          [handoff.display_name || 'Cliente TikTok', handoff.tiktok_open_id, handoff.display_name, handoff.avatar_url],
+        );
+      } catch (err) {
+        if (err.code !== '23505') throw err;
+        userResult = await pool.query(
+          `SELECT id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller
+           FROM users WHERE tiktok_open_id = $1`,
+          [handoff.tiktok_open_id],
+        );
+      }
     }
 
-    return res.json({
-      needsSignupInfo: true,
-      signupToken: signTikTokSignupToken(handoff.tiktok_open_id),
-      profile: {
-        name: handoff.display_name || '',
-        avatarUrl: handoff.avatar_url || null,
-      },
-    });
+    const user = userResult.rows[0];
+    if (!user) return res.status(500).json({ error: 'Não foi possível criar a identidade do TikTok.' });
+    const token = issueToken(user.id);
+    return res.json({ status: 'authenticated', user, token });
   } catch (err) {
     console.error('Erro ao concluir exchange do TikTok:', err);
     return res.status(500).json({ error: 'Erro ao processar o login com TikTok.' });
-  }
-});
-
-// POST /api/auth/tiktok/complete — finaliza o cadastro de uma conta nova.
-router.post('/tiktok/complete', async (req, res) => {
-  const { signupToken, name, email, cpf, phone } = req.body || {};
-  if (!signupToken || !email || !cpf) {
-    return res.status(400).json({ error: 'Token do TikTok, e-mail e CPF são obrigatórios.' });
-  }
-
-  let decoded;
-  try {
-    decoded = jwt.verify(signupToken, process.env.JWT_SECRET);
-  } catch {
-    return res.status(401).json({ error: 'Seu cadastro com TikTok expirou. Inicie o login novamente.' });
-  }
-
-  if (decoded?.purpose !== 'tiktok_signup' || !decoded?.tiktokOpenId) {
-    return res.status(401).json({ error: 'Token de cadastro TikTok inválido.' });
-  }
-
-  const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail.includes('@')) return res.status(400).json({ error: 'E-mail inválido.' });
-  if (!isValidCPF(cpf)) return res.status(400).json({ error: 'CPF inválido.' });
-
-  try {
-    await ensureSchema();
-    const existingTikTok = await pool.query(
-      'SELECT id FROM users WHERE tiktok_open_id = $1',
-      [decoded.tiktokOpenId]
-    );
-    if (existingTikTok.rowCount > 0) {
-      return res.status(409).json({ error: 'Esta conta TikTok já está cadastrada. Tente entrar novamente.' });
-    }
-
-    const existingEmailOrCpf = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR cpf = $2',
-      [normalizedEmail, String(cpf).replace(/\D/g, '')]
-    );
-    if (existingEmailOrCpf.rowCount > 0) {
-      return res.status(409).json({
-        error: 'Já existe uma conta com este e-mail ou CPF. Entre na conta existente para evitar criar uma segunda conta.',
-      });
-    }
-
-    const cleanCpf = String(cpf).replace(/\D/g, '');
-    const insert = await pool.query(
-      `INSERT INTO users (name, email, password_hash, cpf, phone, tiktok_open_id)
-       VALUES ($1, $2, NULL, $3, $4, $5)
-       RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
-      [String(name || '').trim() || 'Usuário TikTok', normalizedEmail, cleanCpf, phone || null, decoded.tiktokOpenId]
-    );
-
-    const user = insert.rows[0];
-    return res.status(201).json({ user, token: issueToken(user.id) });
-  } catch (err) {
-    console.error('Erro ao finalizar cadastro TikTok:', err);
-    return res.status(500).json({ error: 'Erro ao criar a conta com TikTok.' });
   }
 });
 
