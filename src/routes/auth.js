@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
+import { ensureLegalSchema, socialAuthResponse } from './legal.js';
 
 const router = express.Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -31,6 +32,7 @@ async function ensureSocialSchema() {
   await pool.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;');
   await pool.query('ALTER TABLE users ALTER COLUMN email DROP NOT NULL;');
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;');
+  await ensureLegalSchema();
 }
 
 router.post('/signup', async (req, res) => {
@@ -147,14 +149,13 @@ router.post('/google', async (req, res) => {
       const insertResult = await pool.query(
         `INSERT INTO users (name, email, password_hash, cpf, phone, google_id)
          VALUES ($1, $2, NULL, NULL, NULL, $3)
-         RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
+         RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller, legal_accepted_at, legal_version`,
         [name, email, googleId]
       );
       user = insertResult.rows[0];
     }
 
-    const token = issueToken(user.id);
-    return res.json({ status: 'authenticated', user, token });
+    return res.json(await socialAuthResponse(user, 'Google'));
   } catch (err) {
     console.error('Erro no login com Google:', err);
     const status = err.code === '23505' ? 409 : 500;
