@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/auth.js';
 import facebookRoutes from './routes/facebook.js';
+import legalRoutes from './routes/legal.js';
 import orderRoutes from './routes/orders.js';
 import tiktokRoutes from './routes/tiktok.js';
 
@@ -17,6 +18,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth/facebook', facebookRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/legal', legalRoutes);
 app.use('/api/auth', tiktokRoutes);
 app.use('/api/orders', orderRoutes);
 
