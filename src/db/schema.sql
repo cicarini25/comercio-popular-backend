@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            VARCHAR(150) NOT NULL,
-  email           VARCHAR(150) UNIQUE NOT NULL,
+  email           VARCHAR(150) UNIQUE,
   password_hash   VARCHAR(255),
   google_id       VARCHAR(255) UNIQUE,
   cpf             VARCHAR(14) UNIQUE,
@@ -18,18 +18,17 @@ CREATE TABLE IF NOT EXISTS sellers (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   store_name      VARCHAR(150) NOT NULL,
-  plan            VARCHAR(50) NOT NULL DEFAULT 'basico', -- basico, plus, premium
-  plan_status     VARCHAR(20) NOT NULL DEFAULT 'trial',  -- trial, ativo, atrasado, cancelado
+  plan            VARCHAR(50) NOT NULL DEFAULT 'basico',
+  plan_status     VARCHAR(20) NOT NULL DEFAULT 'trial',
   pix_key         VARCHAR(150),
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS products (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  seller_id       UUID REFERENCES sellers(id) ON DELETE SET NULL, -- NULL = produto de afiliado
+  seller_id       UUID REFERENCES sellers(id) ON DELETE SET NULL,
   source          VARCHAR(30) NOT NULL DEFAULT 'proprio',
-  -- proprio, mercado_livre, shopee, amazon, aliexpress, netshoes, shein, tiktok_shop, magalu
-  external_id     VARCHAR(150), -- id do produto na plataforma de afiliado, quando aplicável
+  external_id     VARCHAR(150),
   affiliate_link  TEXT,
   title           VARCHAR(255) NOT NULL,
   description     TEXT,
@@ -45,13 +44,12 @@ CREATE TABLE IF NOT EXISTS orders (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id           UUID NOT NULL REFERENCES users(id),
   status            VARCHAR(30) NOT NULL DEFAULT 'aguardando_pagamento',
-  -- aguardando_pagamento, pago, enviado, entregue, cancelado
   subtotal          NUMERIC(10,2) NOT NULL,
   shipping_fee      NUMERIC(10,2) NOT NULL DEFAULT 0,
   total             NUMERIC(10,2) NOT NULL,
   payment_method    VARCHAR(30),
-  mp_preference_id  VARCHAR(150), -- id da preferência de pagamento no Mercado Pago
-  mp_payment_id     VARCHAR(150), -- id do pagamento confirmado no Mercado Pago
+  mp_preference_id  VARCHAR(150),
+  mp_payment_id     VARCHAR(150),
   tracking_code     VARCHAR(50),
   created_at        TIMESTAMPTZ DEFAULT now(),
   updated_at        TIMESTAMPTZ DEFAULT now()
@@ -62,24 +60,23 @@ CREATE TABLE IF NOT EXISTS order_items (
   order_id      UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   product_id    UUID REFERENCES products(id),
   seller_id     UUID REFERENCES sellers(id),
-  title         VARCHAR(255) NOT NULL, -- guardamos o título no momento da compra
+  title         VARCHAR(255) NOT NULL,
   unit_price    NUMERIC(10,2) NOT NULL,
   quantity      INTEGER NOT NULL DEFAULT 1,
-  seller_amount NUMERIC(10,2), -- quanto o vendedor recebe deste item
-  platform_fee  NUMERIC(10,2) -- quanto fica pra plataforma
+  seller_amount NUMERIC(10,2),
+  platform_fee  NUMERIC(10,2)
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_seller ON products(seller_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 
--- Login com Google: como a tabela "users" já existe em produção,
--- o CREATE TABLE IF NOT EXISTS acima não altera ela. Estes comandos
--- garantem que o banco já publicado também receba as mudanças.
-ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
+-- Migrações compatíveis com a produção.
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) UNIQUE;
 
--- Login com TikTok (OAuth 2.0 / Login Kit).
+-- Login com TikTok.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_open_id VARCHAR(255) UNIQUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_display_name VARCHAR(150);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tiktok_avatar_url TEXT;
