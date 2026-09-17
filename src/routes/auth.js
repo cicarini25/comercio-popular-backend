@@ -9,25 +9,25 @@ const router = express.Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 function isValidCPF(cpf) {
-  cpf = cpf.replace(/\D/g, '');
+  cpf = String(cpf || '').replace(/\D/g, '');
   if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
   let sum = 0;
-  for (let i = 0; i < 9; i++) sum += parseInt(cpf[i]) * (10 - i);
+  for (let i = 0; i < 9; i++) sum += parseInt(cpf[i], 10) * (10 - i);
   let digit1 = (sum * 10) % 11;
   if (digit1 === 10) digit1 = 0;
-  if (digit1 !== parseInt(cpf[9])) return false;
+  if (digit1 !== parseInt(cpf[9], 10)) return false;
   sum = 0;
-  for (let i = 0; i < 10; i++) sum += parseInt(cpf[i]) * (11 - i);
+  for (let i = 0; i < 10; i++) sum += parseInt(cpf[i], 10) * (11 - i);
   let digit2 = (sum * 10) % 11;
   if (digit2 === 10) digit2 = 0;
-  return digit2 === parseInt(cpf[10]);
+  return digit2 === parseInt(cpf[10], 10);
 }
 
 function issueToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
 }
 
-// POST /api/auth/signup
+// POST /api/auth/signup — cadastro tradicional continua exigindo identidade completa.
 router.post('/signup', async (req, res) => {
   const { name, email, password, cpf, phone } = req.body;
 
@@ -42,9 +42,11 @@ router.post('/signup', async (req, res) => {
   }
 
   try {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const cleanCpf = String(cpf).replace(/\D/g, '');
     const existing = await pool.query(
       'SELECT id FROM users WHERE email = $1 OR cpf = $2',
-      [email, cpf]
+      [normalizedEmail, cleanCpf]
     );
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Já existe uma conta com este e-mail ou CPF.' });
@@ -56,7 +58,7 @@ router.post('/signup', async (req, res) => {
       `INSERT INTO users (name, email, password_hash, cpf, phone)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
-      [name, email, passwordHash, cpf, phone]
+      [name, normalizedEmail, passwordHash, cleanCpf, phone]
     );
 
     const user = result.rows[0];
@@ -69,7 +71,7 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// POST /api/auth/login
+// POST /api/auth/login — login tradicional por e-mail/senha.
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -77,10 +79,11 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
     const user = result.rows[0];
 
-    if (!user) {
+    if (!user || !user.password_hash) {
       return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
     }
 
@@ -99,11 +102,9 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// POST /api/auth/google — login/cadastro usando a conta do Google
-// O front-end manda o "idToken" que o Google devolve depois do usuário
-// clicar em "Entrar com Google".
+// POST /api/auth/google — primeiro acesso social entra direto e recebe uma conta Comércio Popular.
 router.post('/google', async (req, res) => {
-  const { idToken, cpf, phone } = req.body;
+  const { idToken } = req.body || {};
 
   if (!idToken) {
     return res.status(400).json({ error: 'Token do Google ausente.' });
@@ -121,56 +122,47 @@ router.post('/google', async (req, res) => {
     return res.status(401).json({ error: 'Não foi possível validar o login com o Google.' });
   }
 
-  const googleId = payload.sub;
-  const email = payload.email;
-  const name = payload.name;
+  const googleId = payload?.sub;
+  const email = typeof payload?.email === 'string' && payload.email.length <= 150
+    ? payload.email.trim().toLowerCase()
+    : null;
+  const name = typeof payload?.name === 'string' && payload.name.trim()
+    ? payload.name.trim().slice(0, 150)
+    : 'Cliente';
+
+  if (!googleId) return res.status(401).json({ error: 'O Google não retornou a identidade da conta.' });
+  if (payload?.email && payload?.email_verified !== true) {
+    return res.status(401).json({ error: 'O e-mail da conta Google não está verificado.' });
+  }
 
   try {
-    // 1) já existe conta vinculada a esse Google?
     let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
     let user = result.rows[0];
 
-    // 2) se não, existe conta com o mesmo e-mail (cadastrada com senha)? vincula o Google a ela
-    if (!user) {
-      result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (!user && email) {
+      result = await pool.query('SELECT * FROM users WHERE lower(email) = $1', [email]);
       user = result.rows[0];
       if (user) {
         await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]);
       }
     }
 
-    // 3) usuário totalmente novo: precisamos do CPF pra terminar o cadastro
     if (!user) {
-      if (!cpf) {
-        // o front-end deve mostrar um formulário pedindo CPF (e telefone)
-        // e chamar essa mesma rota de novo, agora enviando o cpf.
-        return res.json({ needsSignupInfo: true, email, name });
-      }
-      if (!isValidCPF(cpf)) {
-        return res.status(400).json({ error: 'CPF inválido.' });
-      }
-
-      const existingCpf = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpf]);
-      if (existingCpf.rows.length > 0) {
-        return res.status(409).json({ error: 'Já existe uma conta com este CPF.' });
-      }
-
       const insertResult = await pool.query(
-        `INSERT INTO users (name, email, cpf, phone, google_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO users (name, email, password_hash, cpf, phone, google_id)
+         VALUES ($1, $2, NULL, NULL, NULL, $3)
          RETURNING id, name, email, cpf, phone, is_verified_face, is_verified_sms, is_seller`,
-        [name, email, cpf, phone || null, googleId]
+        [name, email, googleId]
       );
       user = insertResult.rows[0];
-    } else {
-      delete user.password_hash;
     }
 
     const token = issueToken(user.id);
-    res.json({ user, token });
+    res.json({ status: 'authenticated', user, token });
   } catch (err) {
     console.error('Erro no login com Google:', err);
-    res.status(500).json({ error: 'Erro ao entrar com Google. Tente novamente.' });
+    const status = err.code === '23505' ? 409 : 500;
+    res.status(status).json({ error: status === 409 ? 'Esta identidade já está vinculada a outra conta.' : 'Erro ao entrar com Google. Tente novamente.' });
   }
 });
 
