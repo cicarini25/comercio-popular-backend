@@ -216,7 +216,11 @@ export async function runWorker() {
         throw new Error("Worker atual suporta apenas o conector Mercado Livre.");
       }
 
-      await processNextMercadoLivreBatch(job);
+      let finished = false;
+      while (!finished && !stopping) {
+        const batchResult = await processNextMercadoLivreBatch(job);
+        finished = batchResult.finished;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Falha desconhecida.";
       const attempts = Number(job.metadata?.attempts || 0) + 1;
