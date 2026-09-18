@@ -78,7 +78,19 @@ export async function importMercadoLivreProducts({
   let skipped = 0;
 
   for (const rawProduct of rawProducts) {
-    const normalized = connector.normalizeProduct(rawProduct);
+    if (rawProduct?.code && rawProduct.code !== 200) {
+      skipped += 1;
+      continue;
+    }
+
+    let normalized;
+    try {
+      normalized = connector.normalizeProduct(rawProduct);
+    } catch (error) {
+      console.error("Produto Mercado Livre ignorado:", error);
+      skipped += 1;
+      continue;
+    }
     const normalizedIdentity = buildNormalizedProduct(normalized);
     const category = categoryOverride?.trim() || normalized.category || "Mercado Livre";
     const source = "mercadolivre";
@@ -115,7 +127,7 @@ export async function importMercadoLivreProducts({
         [
           source,
           normalized.title || "Produto Mercado Livre",
-          normalized.raw?.plain_text || null,
+          null,
           normalized.price ?? 0,
           normalized.imageUrl,
           category,
@@ -154,7 +166,7 @@ export async function importMercadoLivreProducts({
           normalized.currency,
           normalized.availableQuantity,
           normalized.availableQuantity > 0 ? "disponivel" : "indisponivel",
-          normalized.raw?.seller_address?.address_line || null,
+          normalized.raw?.seller?.nickname || null,
           JSON.stringify({ condition: normalized.condition }),
           existingOffer.rows[0].id
         ]
@@ -192,7 +204,7 @@ export async function importMercadoLivreProducts({
         source,
         normalized.externalId,
         normalized.title || "Produto Mercado Livre",
-        normalized.raw?.plain_text || null,
+        null,
         normalized.price ?? 0,
         normalized.imageUrl || null,
         category,
