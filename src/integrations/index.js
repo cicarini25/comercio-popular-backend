@@ -15,3 +15,4 @@ export {
   tokenize
 } from "./core/normalizer.js";
 export { MercadoLivreConnector } from "./mercadolivre/client.js";
+export { ShopeeAffiliateConnector } from "./shopee/client.js";
