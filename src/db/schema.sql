@@ -189,3 +189,104 @@ VALUES
   ('shein', 'SHEIN'),
   ('magalu', 'Magalu')
 ON CONFLICT (code) DO NOTHING;
+
+ 
+-- ============================================================
+-- HUB DE INTEGRAÇÕES / IMPORTAÇÃO / PAREAMENTO
+-- ============================================================
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS normalized_title TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS model VARCHAR(180);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS canonical_key VARCHAR(220);
+
+CREATE INDEX IF NOT EXISTS idx_products_normalized_title
+  ON products USING gin (to_tsvector('simple', COALESCE(normalized_title, title)));
+CREATE INDEX IF NOT EXISTS idx_products_model ON products(model);
+CREATE INDEX IF NOT EXISTS idx_products_canonical_key ON products(canonical_key);
+
+ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS canonical_url TEXT;
+ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_product_offers_platform_external
+  ON product_offers(platform_id, external_id)
+  WHERE external_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS integration_connections (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  platform_id             UUID NOT NULL REFERENCES affiliate_platforms(id) ON DELETE CASCADE,
+  account_label           VARCHAR(150) NOT NULL,
+  auth_type               VARCHAR(30) NOT NULL DEFAULT 'oauth2',
+  credential_ref          VARCHAR(180),
+  status                  VARCHAR(30) NOT NULL DEFAULT 'configured',
+  last_sync_at            TIMESTAMPTZ,
+  created_at              TIMESTAMPTZ DEFAULT now(),
+  updated_at              TIMESTAMPTZ DEFAULT now(),
+  metadata                JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_integration_connections_platform
+  ON integration_connections(platform_id);
+
+CREATE TABLE IF NOT EXISTS catalog_import_jobs (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  platform_id               UUID REFERENCES affiliate_platforms(id) ON DELETE SET NULL,
+  integration_connection_id UUID REFERENCES integration_connections(id) ON DELETE SET NULL,
+  source_type               VARCHAR(40) NOT NULL,
+  status                    VARCHAR(30) NOT NULL DEFAULT 'queued',
+  requested_count           INTEGER NOT NULL DEFAULT 0,
+  discovered_count          INTEGER NOT NULL DEFAULT 0,
+  imported_count            INTEGER NOT NULL DEFAULT 0,
+  updated_count             INTEGER NOT NULL DEFAULT 0,
+  matched_count             INTEGER NOT NULL DEFAULT 0,
+  review_count              INTEGER NOT NULL DEFAULT 0,
+  error_count               INTEGER NOT NULL DEFAULT 0,
+  started_at                TIMESTAMPTZ,
+  finished_at               TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ DEFAULT now(),
+  metadata                  JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_import_jobs_status
+  ON catalog_import_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_catalog_import_jobs_platform
+  ON catalog_import_jobs(platform_id);
+
+CREATE TABLE IF NOT EXISTS catalog_import_items (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id                UUID NOT NULL REFERENCES catalog_import_jobs(id) ON DELETE CASCADE,
+  external_id           VARCHAR(180),
+  source_url            TEXT,
+  normalized_url        TEXT,
+  raw_payload           JSONB NOT NULL DEFAULT '{}'::jsonb,
+  normalized_payload    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  product_id            UUID REFERENCES products(id) ON DELETE SET NULL,
+  import_status         VARCHAR(30) NOT NULL DEFAULT 'pending',
+  error_message         TEXT,
+  created_at            TIMESTAMPTZ DEFAULT now(),
+  updated_at            TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_import_items_job
+  ON catalog_import_items(job_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_import_items_external
+  ON catalog_import_items(external_id);
+
+CREATE TABLE IF NOT EXISTS product_match_candidates (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_offer_id       UUID NOT NULL REFERENCES product_offers(id) ON DELETE CASCADE,
+  candidate_product_id  UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  score                 NUMERIC(7,4) NOT NULL,
+  decision              VARCHAR(20) NOT NULL DEFAULT 'revisao',
+  match_basis           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  contradictions        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  reviewed_at           TIMESTAMPTZ,
+  created_at             TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (source_offer_id, candidate_product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_match_candidates_offer
+  ON product_match_candidates(source_offer_id);
+CREATE INDEX IF NOT EXISTS idx_product_match_candidates_score
+  ON product_match_candidates(score DESC);
+CREATE INDEX IF NOT EXISTS idx_product_match_candidates_decision
+  ON product_match_candidates(decision);
