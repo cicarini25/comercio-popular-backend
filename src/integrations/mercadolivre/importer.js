@@ -1,6 +1,13 @@
 import pool from "../../db/pool.js";
 import { MercadoLivreConnector } from "./client.js";
 import { buildNormalizedProduct, normalizeText } from "../core/normalizer.js";
+import {
+  buildCatalogCanonicalKey,
+  findCatalogMatchCandidates,
+  hasEnoughIdentity,
+  persistMatchCandidates,
+  selectCatalogMatch
+} from "../core/catalog-pairing.js";
 
 const MAX_INPUT_ITEMS = 1000;
 
@@ -75,6 +82,8 @@ export async function importMercadoLivreProducts({
 
   let imported = 0;
   let updated = 0;
+  let matched = 0;
+  let review = 0;
   let skipped = 0;
 
   for (const rawProduct of rawProducts) {
@@ -91,6 +100,7 @@ export async function importMercadoLivreProducts({
       skipped += 1;
       continue;
     }
+
     const normalizedIdentity = buildNormalizedProduct(normalized);
     const category = categoryOverride?.trim() || normalized.category || "Mercado Livre";
     const source = "mercadolivre";
@@ -136,7 +146,7 @@ export async function importMercadoLivreProducts({
           normalized.gtin,
           normalized.model,
           normalizedIdentity.title,
-          buildCanonicalKey(normalized),
+          buildCatalogCanonicalKey(normalized),
           JSON.stringify({ marketplace: "mercadolivre", condition: normalized.condition }),
           productId
         ]
@@ -176,59 +186,80 @@ export async function importMercadoLivreProducts({
       continue;
     }
 
-    const productInsert = await pool.query(
-      `INSERT INTO products (
-          source,
-          external_id,
-          title,
-          description,
-          price,
-          image_url,
-          category,
-          stock_units,
-          product_kind,
-          brand,
-          ean,
-          model,
-          normalized_title,
-          canonical_key,
-          status,
-          metadata,
-          updated_at
-        )
-        VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,'afiliado',$9,$10,$11,$12,$13,'ativo',$14::jsonb,now()
-        )
-        RETURNING id`,
-      [
-        source,
-        normalized.externalId,
-        normalized.title || "Produto Mercado Livre",
-        null,
-        normalized.price ?? 0,
-        normalized.imageUrl || null,
-        category,
-        normalized.availableQuantity ?? 0,
-        normalized.brand || null,
-        normalized.gtin || null,
-        normalized.model || null,
-        normalizedIdentity.title,
-        buildCanonicalKey(normalized),
-        JSON.stringify({
-          importedFrom: "mercadolivre",
-          marketplaceCategoryId: normalized.category,
-          condition: normalized.condition
-        })
-      ]
-    );
-
-    const productId = productInsert.rows[0]?.id;
-    if (!productId) {
-      skipped += 1;
-      continue;
+    let pairing;
+    if (hasEnoughIdentity(normalized)) {
+      const candidates = await findCatalogMatchCandidates({
+        product: normalized,
+        limit: 20
+      });
+      pairing = selectCatalogMatch(normalized, candidates);
+    } else {
+      pairing = { ranked: [], automaticMatch: null, reviewMatch: null, decision: "novo" };
     }
 
-    await pool.query(
+    let productId;
+    if (pairing.automaticMatch) {
+      productId = pairing.automaticMatch.candidate.id;
+      matched += 1;
+    } else {
+      const productInsert = await pool.query(
+        `INSERT INTO products (
+            source,
+            external_id,
+            title,
+            description,
+            price,
+            image_url,
+            category,
+            stock_units,
+            product_kind,
+            brand,
+            ean,
+            model,
+            normalized_title,
+            canonical_key,
+            status,
+            metadata,
+            updated_at
+          )
+          VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,'afiliado',$9,$10,$11,$12,$13,'ativo',$14::jsonb,now()
+          )
+          RETURNING id`,
+        [
+          source,
+          normalized.externalId,
+          normalized.title || "Produto Mercado Livre",
+          null,
+          normalized.price ?? 0,
+          normalized.imageUrl || null,
+          category,
+          normalized.availableQuantity ?? 0,
+          normalized.brand || null,
+          normalized.gtin || null,
+          normalized.model || null,
+          normalizedIdentity.title,
+          buildCatalogCanonicalKey(normalized),
+          JSON.stringify({
+            importedFrom: "mercadolivre",
+            marketplaceCategoryId: normalized.category,
+            condition: normalized.condition,
+            pairingDecision: pairing.decision
+          })
+        ]
+      );
+
+      productId = productInsert.rows[0]?.id;
+      if (!productId) {
+        skipped += 1;
+        continue;
+      }
+
+      imported += 1;
+      if (pairing.decision === "revisao") review += 1;
+    }
+
+    const offerInsert = await pool.query(
       `INSERT INTO product_offers (
          product_id,
          offer_type,
@@ -265,7 +296,8 @@ export async function importMercadoLivreProducts({
          last_synced_at = now(),
          last_checked_at = now(),
          metadata = EXCLUDED.metadata,
-         updated_at = now()`,
+         updated_at = now()
+       RETURNING id`,
       [
         productId,
         platformId,
@@ -276,11 +308,20 @@ export async function importMercadoLivreProducts({
         normalized.currency,
         normalized.availableQuantity,
         normalized.availableQuantity > 0 ? "disponivel" : "indisponivel",
-        JSON.stringify({ importedFrom: "mercadolivre" })
+        JSON.stringify({
+          importedFrom: "mercadolivre",
+          pairingDecision: pairing.decision,
+          matchedCandidateId: pairing.automaticMatch?.candidate?.id || null
+        })
       ]
     );
 
-    imported += 1;
+    if (offerInsert.rows[0]?.id && pairing.ranked.length) {
+      await persistMatchCandidates({
+        sourceOfferId: offerInsert.rows[0].id,
+        rankedCandidates: pairing.ranked
+      });
+    }
   }
 
   return {
@@ -289,14 +330,8 @@ export async function importMercadoLivreProducts({
     returnedByApi: rawProducts.length,
     imported,
     updated,
+    matched,
+    review,
     skipped
   };
-}
-
-function buildCanonicalKey(product) {
-  const normalized = buildNormalizedProduct(product);
-  const identity = [normalized.brand, normalized.model].filter(Boolean).join("|");
-  if (identity) return identity.slice(0, 220);
-
-  return normalizeText(product.title).replace(/\s+/g, "-").slice(0, 220);
 }
