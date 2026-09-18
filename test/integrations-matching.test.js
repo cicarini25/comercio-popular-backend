@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MercadoLivreConnector, findBestMatches, scoreProductMatch } from "../src/integrations/index.js";
+import { MercadoLivreConnector, findBestMatches, scoreProductMatch, selectCatalogMatch } from "../src/integrations/index.js";
 
 test("pareia por GTIN de forma determinística", () => {
   const result = scoreProductMatch(
@@ -65,6 +65,41 @@ test("escolhe o melhor candidato por identidade e título", () => {
 
   assert.equal(results[0].candidate.id, "certo");
   assert.equal(results[0].match.basis.includes("model_exact"), true);
+});
+
+test("seleciona pareamento automático quando existe identidade forte", () => {
+  const result = selectCatalogMatch(
+    {
+      title: "Fone Bluetooth Marca X Modelo Y",
+      brand: "Marca X",
+      model: "Modelo Y"
+    },
+    [
+      { id: "master-1", title: "Fone Marca X Modelo Y", brand: "Marca X", model: "Modelo Y" }
+    ]
+  );
+
+  assert.equal(result.decision, "automatico");
+  assert.equal(result.automaticMatch.candidate.id, "master-1");
+});
+
+test("manda para revisão quando há similaridade, mas identidade insuficiente", () => {
+  const result = selectCatalogMatch(
+    {
+      title: "Cadeira de Escritório Ergonômica com Apoio Lombar",
+      brand: "Marca X"
+    },
+    [
+      {
+        id: "master-2",
+        title: "Cadeira de Escritório Ergonômica com Apoio Lombar Ajustável",
+        brand: "Marca X"
+      }
+    ]
+  );
+
+  assert.equal(result.decision, "revisao");
+  assert.equal(result.reviewMatch.candidate.id, "master-2");
 });
 
 test("Mercado Livre quebra lotes em no máximo 20 IDs", async () => {
