@@ -64,8 +64,9 @@ export function scoreProductMatch(sourceProduct, candidateProduct) {
   }
 
   const strongIdentity =
-    basis.includes("gtin_exact") ||
-    (basis.includes("brand_exact") && basis.includes("model_exact"));
+    contradictions.length === 0 &&
+    (basis.includes("gtin_exact") ||
+      (basis.includes("brand_exact") && basis.includes("model_exact")));
 
   let decision = "rejeitar";
   if (strongIdentity || score >= AUTO_MATCH_THRESHOLD) decision = "automatico";
