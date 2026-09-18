@@ -1,7 +1,7 @@
 import { buildNormalizedProduct, normalizeCompactText, tokenize } from "./normalizer.js";
 
 export const AUTO_MATCH_THRESHOLD = 0.92;
-export const REVIEW_THRESHOLD = 0.75;
+export const REVIEW_THRESHOLD = 0.65;
 
 export function scoreProductMatch(sourceProduct, candidateProduct) {
   const source = buildNormalizedProduct(sourceProduct);
