@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
+import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
 
 const router = express.Router();
 const MAX_ENQUEUE_ITEMS = 30000;
@@ -44,6 +45,73 @@ router.post("/mercadolivre/import", requireIntegrationAdmin, async (req, res) =>
     console.error("Erro na importação Mercado Livre:", error);
     res.status(400).json({
       error: error instanceof Error ? error.message : "Falha na importação."
+    });
+  }
+});
+
+// GET /api/integrations/shopee/health
+router.get("/shopee/health", requireIntegrationAdmin, async (_req, res) => {
+  const connector = new ShopeeAffiliateConnector({
+    appId: process.env.SHOPEE_AFFILIATE_APP_ID,
+    secret: process.env.SHOPEE_AFFILIATE_SECRET
+  });
+
+  return res.json({
+    marketplace: "shopee",
+    configured: connector.isConfigured()
+  });
+});
+
+// POST /api/integrations/shopee/generate-link
+router.post("/shopee/generate-link", requireIntegrationAdmin, async (req, res) => {
+  try {
+    const connector = new ShopeeAffiliateConnector({
+      appId: process.env.SHOPEE_AFFILIATE_APP_ID,
+      secret: process.env.SHOPEE_AFFILIATE_SECRET
+    });
+
+    const productUrl = typeof req.body?.productUrl === "string"
+      ? req.body.productUrl.trim()
+      : "";
+
+    if (!productUrl) {
+      return res.status(400).json({ error: "Envie productUrl." });
+    }
+
+    const result = await connector.generateAffiliateLink(
+      productUrl,
+      Array.isArray(req.body?.subIds) ? req.body.subIds : undefined
+    );
+
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error("Erro ao gerar link Shopee:", error);
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Falha ao gerar link Shopee."
+    });
+  }
+});
+
+// GET /api/integrations/shopee/search
+router.get("/shopee/search", requireIntegrationAdmin, async (req, res) => {
+  try {
+    const connector = new ShopeeAffiliateConnector({
+      appId: process.env.SHOPEE_AFFILIATE_APP_ID,
+      secret: process.env.SHOPEE_AFFILIATE_SECRET
+    });
+
+    const result = await connector.searchOffers({
+      keyword: typeof req.query.keyword === "string" ? req.query.keyword : "",
+      categoryId: req.query.categoryId,
+      page: req.query.page,
+      limit: req.query.limit
+    });
+
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error("Erro ao consultar ofertas Shopee:", error);
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Falha ao consultar Shopee."
     });
   }
 });
