@@ -14,5 +14,13 @@ export {
   normalizeText,
   tokenize
 } from "./core/normalizer.js";
+export {
+  buildCandidateSummary,
+  buildCatalogCanonicalKey,
+  findCatalogMatchCandidates,
+  hasEnoughIdentity,
+  persistMatchCandidates,
+  selectCatalogMatch
+} from "./core/catalog-pairing.js";
 export { MercadoLivreConnector } from "./mercadolivre/client.js";
 export { ShopeeAffiliateConnector } from "./shopee/client.js";
