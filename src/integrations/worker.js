@@ -97,15 +97,19 @@ export async function processNextMercadoLivreBatch(job) {
     if (ids.length) {
       await pool.query(
         `UPDATE catalog_import_items
-            SET import_status = 'importado',
+            SET import_status = CASE
+                                  WHEN po.metadata->>'pairingDecision' = 'automatico' THEN 'pareado'
+                                  WHEN po.metadata->>'pairingDecision' = 'revisao' THEN 'revisao'
+                                  ELSE 'importado'
+                                END,
                 product_id = po.product_id,
                 updated_at = now(),
                 error_message = NULL
-          FROM product_offers po
-         WHERE catalog_import_items.job_id = $1
-           AND catalog_import_items.external_id = po.external_id
-           AND po.platform_id = $2
-           AND po.external_id = ANY($3::text[])`,
+           FROM product_offers po
+          WHERE catalog_import_items.job_id = $1
+            AND catalog_import_items.external_id = po.external_id
+            AND po.platform_id = $2
+            AND po.external_id = ANY($3::text[])`,
         [job.id, job.platform_id, ids]
       );
     }
@@ -126,7 +130,9 @@ export async function processNextMercadoLivreBatch(job) {
           SET discovered_count = discovered_count + $2,
               imported_count = imported_count + $3,
               updated_count = updated_count + $4,
-              error_count = error_count + $5,
+              matched_count = matched_count + $5,
+              review_count = review_count + $6,
+              error_count = error_count + $7,
               updated_at = now()
         WHERE id = $1`,
       [
@@ -134,6 +140,8 @@ export async function processNextMercadoLivreBatch(job) {
         result.returnedByApi,
         result.imported,
         result.updated,
+        result.matched,
+        result.review,
         result.skipped
       ]
     );
