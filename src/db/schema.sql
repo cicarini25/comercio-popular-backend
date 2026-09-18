@@ -203,6 +203,10 @@ CREATE INDEX IF NOT EXISTS idx_products_normalized_title
   ON products USING gin (to_tsvector('simple', COALESCE(normalized_title, title)));
 CREATE INDEX IF NOT EXISTS idx_products_model ON products(model);
 CREATE INDEX IF NOT EXISTS idx_products_canonical_key ON products(canonical_key);
+CREATE INDEX IF NOT EXISTS idx_products_brand_normalized
+  ON products ((regexp_replace(lower(COALESCE(brand, '')), '[^a-z0-9]', '', 'g')));
+CREATE INDEX IF NOT EXISTS idx_products_model_normalized
+  ON products ((regexp_replace(lower(COALESCE(model, '')), '[^a-z0-9]', '', 'g')));
 
 ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS canonical_url TEXT;
 ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS last_checked_at TIMESTAMPTZ;
