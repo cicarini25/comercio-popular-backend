@@ -33,3 +33,12 @@ test("deduplica IDs e ignora URL de outro domínio", () => {
 
   assert.deepEqual(result, ["MLB123", "MLB456"]);
 });
+
+test("extrai ITEM_ID do padrão usado na lista TUDO PARA CASA", () => {
+  assert.equal(
+    extractMercadoLivreItemId(
+      "https://www.mercadolivre.com.br/lixeira-inteligente/p/MLB54545450?pdp_filters=item_id%3AMLB4699336817"
+    ),
+    "MLB4699336817"
+  );
+});
