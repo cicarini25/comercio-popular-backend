@@ -5,15 +5,24 @@ import { importMercadoLivreProducts } from "./mercadolivre/importer.js";
 const POLL_MS = Number(process.env.INTEGRATION_WORKER_POLL_MS || 3000);
 const BATCH_SIZE = Math.min(Number(process.env.INTEGRATION_WORKER_BATCH_SIZE || 20), 20);
 const MAX_JOB_ATTEMPTS = Number(process.env.INTEGRATION_WORKER_MAX_ATTEMPTS || 3);
+const LEASE_MINUTES = Number(process.env.INTEGRATION_WORKER_LEASE_MINUTES || 30);
 
 let stopping = false;
 
-function requestStop() {
-  stopping = true;
-}
+process.on("SIGTERM", () => { stopping = true; });
+process.on("SIGINT", () => { stopping = true; });
 
-process.on("SIGTERM", requestStop);
-process.on("SIGINT", requestStop);
+export async function recoverStaleJobs() {
+  await pool.query(
+    `UPDATE catalog_import_jobs
+        SET status = 'queued',
+            updated_at = now(),
+            metadata = COALESCE(metadata, '{}'::jsonb) || '{"recovered":true}'::jsonb
+      WHERE status = 'processando'
+        AND updated_at < now() - ($1::text || ' minutes')::interval`,
+    [LEASE_MINUTES]
+  );
+}
 
 export async function claimNextImportJob() {
   const client = await pool.connect();
@@ -22,14 +31,11 @@ export async function claimNextImportJob() {
     await client.query("BEGIN");
 
     const result = await client.query(
-      `SELECT id, platform_id, integration_connection_id, source_type, status, requested_count,
-              discovered_count, imported_count, updated_count, matched_count, review_count, error_count, metadata
+      `SELECT id, platform_id, integration_connection_id, source_type, status,
+              requested_count, discovered_count, imported_count, updated_count,
+              matched_count, review_count, error_count, metadata
          FROM catalog_import_jobs
-        WHERE status IN ('queued', 'processando')
-          AND (
-            status = 'queued'
-            OR (started_at IS NOT NULL AND started_at > now() - interval '30 minutes')
-          )
+        WHERE status = 'queued'
         ORDER BY created_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1`
@@ -63,7 +69,7 @@ export async function claimNextImportJob() {
 
 export async function processNextMercadoLivreBatch(job) {
   const pending = await pool.query(
-    `SELECT id, source_url, normalized_url, external_id
+    `SELECT id, external_id, source_url, normalized_url
        FROM catalog_import_items
       WHERE job_id = $1
         AND import_status IN ('pending', 'retry')
@@ -77,82 +83,80 @@ export async function processNextMercadoLivreBatch(job) {
     return { processed: 0, finished: true };
   }
 
-  const items = pending.rows.map((row) => row.external_id || row.normalized_url || row.source_url);
-  const idsByInput = new Map(
-    pending.rows.map((row) => [
-      row.id,
-      row.external_id || row.normalized_url || row.source_url
-    ])
-  );
+  const inputs = pending.rows.map((row) => row.external_id || row.normalized_url || row.source_url);
 
   try {
     const result = await importMercadoLivreProducts({
-      items,
+      items: inputs,
       accessToken: process.env.MELI_ACCESS_TOKEN,
       categoryOverride: job.metadata?.category
     });
 
-    await pool.query(
-      `UPDATE catalog_import_items
-          SET import_status = 'importado',
-              product_id = po.product_id,
-              updated_at = now(),
-              error_message = NULL
-        FROM product_offers po
-       WHERE catalog_import_items.job_id = $1
-         AND catalog_import_items.import_status IN ('pending', 'retry')
-         AND po.platform_id = $2
-         AND po.external_id = catalog_import_items.external_id`,
-      [job.id, job.platform_id]
-    );
+    const ids = pending.rows.map((row) => row.external_id).filter(Boolean);
 
-    for (const row of pending.rows) {
+    if (ids.length) {
       await pool.query(
         `UPDATE catalog_import_items
             SET import_status = 'importado',
+                product_id = po.product_id,
                 updated_at = now(),
                 error_message = NULL
-          WHERE id = $1`,
-        [row.id]
+          FROM product_offers po
+         WHERE catalog_import_items.job_id = $1
+           AND catalog_import_items.external_id = po.external_id
+           AND po.platform_id = $2
+           AND po.external_id = ANY($3::text[])`,
+        [job.id, job.platform_id, ids]
       );
     }
 
-    await updateJobCounters(job.id, result);
-    return { processed: pending.rows.length, finished: false, result, idsByInput };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Falha desconhecida na importação.";
     await pool.query(
       `UPDATE catalog_import_items
           SET import_status = 'erro',
+              error_message = 'Produto não retornado pela API do Mercado Livre.',
+              updated_at = now()
+        WHERE job_id = $1
+          AND id = ANY($2::uuid[])
+          AND import_status IN ('pending', 'retry')`,
+      [job.id, pending.rows.map((row) => row.id)]
+    );
+
+    await pool.query(
+      `UPDATE catalog_import_jobs
+          SET discovered_count = discovered_count + $2,
+              imported_count = imported_count + $3,
+              updated_count = updated_count + $4,
+              error_count = error_count + $5,
+              updated_at = now()
+        WHERE id = $1`,
+      [
+        job.id,
+        result.returnedByApi,
+        result.imported,
+        result.updated,
+        result.skipped
+      ]
+    );
+
+    return {
+      processed: pending.rows.length,
+      finished: false,
+      result
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha desconhecida na importação.";
+
+    await pool.query(
+      `UPDATE catalog_import_items
+          SET import_status = 'retry',
               error_message = $2,
               updated_at = now()
         WHERE id = ANY($1::uuid[])`,
       [pending.rows.map((row) => row.id), message.slice(0, 500)]
     );
 
-    await pool.query(
-      `UPDATE catalog_import_jobs
-          SET error_count = error_count + $2,
-              metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb,
-              updated_at = now()
-        WHERE id = $1`,
-      [job.id, pending.rows.length, JSON.stringify({ lastError: message.slice(0, 500) })]
-    );
-
     throw error;
   }
-}
-
-async function updateJobCounters(jobId, result) {
-  await pool.query(
-    `UPDATE catalog_import_jobs
-        SET discovered_count = GREATEST(discovered_count, $2),
-            imported_count = imported_count + $3,
-            updated_count = updated_count + $4,
-            updated_at = now()
-      WHERE id = $1`,
-    [jobId, result.validItemIds, result.imported, result.updated]
-  );
 }
 
 async function finalizeJob(jobId) {
@@ -164,7 +168,7 @@ async function finalizeJob(jobId) {
     [jobId]
   );
 
-  if (pending.rows[0].count > 0) return;
+  if (pending.rows[0].count > 0) return false;
 
   const errors = await pool.query(
     `SELECT COUNT(*)::int AS count
@@ -183,10 +187,16 @@ async function finalizeJob(jobId) {
         AND status <> 'concluido'`,
     [jobId, errors.rows[0].count]
   );
+
+  return true;
 }
 
 export async function runWorker() {
-  console.log(`Comércio Popular integration worker iniciado (poll=${POLL_MS}ms, batch=${BATCH_SIZE}).`);
+  console.log(
+    `Comércio Popular integration worker iniciado (poll=${POLL_MS}ms, batch=${BATCH_SIZE}).`
+  );
+
+  await recoverStaleJobs();
 
   while (!stopping) {
     const job = await claimNextImportJob();
@@ -197,15 +207,13 @@ export async function runWorker() {
     }
 
     try {
-      if (job.platform_id) {
-        const platform = await pool.query(
-          "SELECT code FROM affiliate_platforms WHERE id = $1 LIMIT 1",
-          [job.platform_id]
-        );
+      const platform = await pool.query(
+        "SELECT code FROM affiliate_platforms WHERE id = $1 LIMIT 1",
+        [job.platform_id]
+      );
 
-        if (platform.rows[0]?.code !== "mercadolivre") {
-          throw new Error("Worker atual suporta apenas o conector Mercado Livre.");
-        }
+      if (platform.rows[0]?.code !== "mercadolivre") {
+        throw new Error("Worker atual suporta apenas o conector Mercado Livre.");
       }
 
       await processNextMercadoLivreBatch(job);
@@ -218,8 +226,8 @@ export async function runWorker() {
           `UPDATE catalog_import_jobs
               SET status = 'falhou',
                   finished_at = now(),
-                  metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
-                  updated_at = now()
+                  updated_at = now(),
+                  metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
             WHERE id = $1`,
           [job.id, JSON.stringify({ attempts, lastError: message.slice(0, 500) })]
         );
@@ -227,8 +235,8 @@ export async function runWorker() {
         await pool.query(
           `UPDATE catalog_import_jobs
               SET status = 'queued',
-                  metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
-                  updated_at = now()
+                  updated_at = now(),
+                  metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
             WHERE id = $1`,
           [job.id, JSON.stringify({ attempts, lastError: message.slice(0, 500) })]
         );
