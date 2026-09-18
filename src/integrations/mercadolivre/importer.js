@@ -21,7 +21,7 @@ export function extractMercadoLivreItemId(value) {
       url.searchParams.get("item_id") ||
       url.searchParams.get("itemId");
 
-    const filterMatch = url.searchParams.get("pdp_filters")?.match(/item_id%3A(MLB\d+)/i);
+    const filterMatch = url.searchParams.get("pdp_filters")?.match(/(?:^|:)item_id:(MLB\d+)/i);
     const pathMatch = url.pathname.match(/(MLB\d+)/i);
 
     return (queryId || filterMatch?.[1] || pathMatch?.[1])?.toUpperCase();
