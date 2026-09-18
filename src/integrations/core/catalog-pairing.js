@@ -20,6 +20,7 @@ export async function findCatalogMatchCandidates({
   db = pool
 } = {}) {
   const normalized = buildNormalizedProduct(product);
+  const canonicalKey = buildCatalogCanonicalKey(product);
   const safeLimit = Math.min(Math.max(Number(limit) || DEFAULT_CANDIDATE_LIMIT, 1), 50);
 
   const clauses = ["p.status = 'ativo'", "p.product_kind = 'afiliado'"];
@@ -38,12 +39,24 @@ export async function findCatalogMatchCandidates({
     identityConditions.push("p.ean = $" + addParam(normalized.gtin));
   }
 
+  if (canonicalKey) {
+    identityConditions.push("p.canonical_key = $" + addParam(canonicalKey));
+  }
+
   if (normalized.brand && normalized.model) {
     const brandParam = addParam(normalized.brand);
     const modelParam = addParam(normalized.model);
-    identityConditions.push("(p.brand = $" + brandParam + " AND p.model = $" + modelParam + ")");
+    identityConditions.push(
+      "(regexp_replace(lower(COALESCE(p.brand, '')), '[^a-z0-9]', '', 'g') = $" +
+      brandParam +
+      " AND regexp_replace(lower(COALESCE(p.model, '')), '[^a-z0-9]', '', 'g') = $" +
+      modelParam + ")"
+    );
   } else if (normalized.brand) {
-    identityConditions.push("p.brand = $" + addParam(normalized.brand));
+    identityConditions.push(
+      "regexp_replace(lower(COALESCE(p.brand, '')), '[^a-z0-9]', '', 'g') = $" +
+      addParam(normalized.brand)
+    );
   }
 
   if (normalized.title) {
