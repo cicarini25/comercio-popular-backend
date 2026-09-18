@@ -243,7 +243,8 @@ CREATE TABLE IF NOT EXISTS catalog_import_jobs (
   started_at                TIMESTAMPTZ,
   finished_at               TIMESTAMPTZ,
   created_at                TIMESTAMPTZ DEFAULT now(),
-  metadata                  JSONB NOT NULL DEFAULT '{}'::jsonb
+  metadata                  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at                TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_catalog_import_jobs_status
