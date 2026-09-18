@@ -83,17 +83,21 @@ test("seleciona pareamento automático quando existe identidade forte", () => {
   assert.equal(result.automaticMatch.candidate.id, "master-1");
 });
 
-test("manda para revisão quando há similaridade, mas identidade insuficiente", () => {
+test("manda para revisão quando há similaridade suficiente sem identidade forte", () => {
   const result = selectCatalogMatch(
     {
-      title: "Cadeira de Escritório Ergonômica com Apoio Lombar",
-      brand: "Marca X"
+      title: "Cadeira Escritório Ergonômica Apoio Lombar",
+      brand: "Marca X",
+      category: "moveis",
+      attributes: { cor: "preta", material: "plastico" }
     },
     [
       {
         id: "master-2",
-        title: "Cadeira de Escritório Ergonômica com Apoio Lombar Ajustável",
-        brand: "Marca X"
+        title: "Cadeira Escritório Ergonômica com Apoio Lombar",
+        brand: "Marca X",
+        category: "moveis",
+        attributes: { cor: "preta", material: "plastico" }
       }
     ]
   );
