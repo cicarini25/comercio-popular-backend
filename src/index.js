@@ -7,11 +7,12 @@ import legalRoutes from './routes/legal.js';
 import orderRoutes from './routes/orders.js';
 import tiktokRoutes from './routes/tiktok.js';
 import catalogRoutes from './routes/catalog.js';
+import integrationRoutes from './routes/integrations.js';
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Comércio Popular API' });
@@ -23,6 +24,7 @@ app.use('/api/auth/legal', legalRoutes);
 app.use('/api/auth', tiktokRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/catalog', catalogRoutes);
+app.use('/api/integrations', integrationRoutes);
 
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
