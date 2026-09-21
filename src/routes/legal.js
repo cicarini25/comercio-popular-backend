@@ -11,10 +11,12 @@ export async function ensureLegalSchema(db = pool) {
   `);
 }
 
-export function issueLegalPendingToken(userId, provider) {
+export function issueLegalPendingToken(userId, provider, env = process.env) {
+  const secret = env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET não configurado.');
   return jwt.sign(
     { purpose: 'legal_acceptance', userId, provider, version: CURRENT_LEGAL_VERSION },
-    process.env.JWT_SECRET,
+    secret,
     { expiresIn: '10m' },
   );
 }
@@ -32,20 +34,22 @@ function safeUser(user) {
   };
 }
 
-export async function socialAuthResponse(user, provider, db = pool) {
+export async function socialAuthResponse(user, provider, db = pool, env = process.env) {
   await ensureLegalSchema(db);
   const userForResponse = safeUser(user);
 
   if (!user.legal_accepted_at || user.legal_version !== CURRENT_LEGAL_VERSION) {
     return {
       status: 'legal_required',
-      legalToken: issueLegalPendingToken(user.id, provider),
+      legalToken: issueLegalPendingToken(user.id, provider, env),
       user: userForResponse,
       legalVersion: CURRENT_LEGAL_VERSION,
     };
   }
 
-  const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+  const secret = env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET não configurado.');
+  const token = jwt.sign({ userId: user.id }, secret, { expiresIn: '30d' });
   return { status: 'authenticated', token, user: userForResponse };
 }
 
