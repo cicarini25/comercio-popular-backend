@@ -309,8 +309,7 @@ ALTER TABLE integration_connections
   ADD COLUMN IF NOT EXISTS granted_scope TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_integration_connections_platform_user
-  ON integration_connections(platform_id, account_user_id)
-  WHERE account_user_id IS NOT NULL;
+  ON integration_connections(platform_id, account_user_id);
 
 CREATE INDEX IF NOT EXISTS idx_integration_connections_token_expiry
   ON integration_connections(access_token_expires_at);
