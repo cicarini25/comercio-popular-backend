@@ -1,6 +1,7 @@
 import pool from "../../db/pool.js";
 import { MercadoLivreConnector } from "./client.js";
 import { buildNormalizedProduct, normalizeText } from "../core/normalizer.js";
+import { getMercadoLivreAccessToken } from "./oauth.js";
 import {
   buildCatalogCanonicalKey,
   findCatalogMatchCandidates,
@@ -69,7 +70,7 @@ export async function importMercadoLivreProducts({
     throw new Error("Nenhum ITEM_ID válido do Mercado Livre foi encontrado.");
   }
 
-  const connector = new MercadoLivreConnector({ accessToken });
+  const connector = new MercadoLivreConnector({ accessToken: accessToken || await getMercadoLivreAccessToken() });
   const rawProducts = await connector.getProductsBulk(itemIds);
 
   const platformResult = await pool.query(
