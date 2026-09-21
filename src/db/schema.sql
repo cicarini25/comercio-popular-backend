@@ -295,3 +295,57 @@ CREATE INDEX IF NOT EXISTS idx_product_match_candidates_score
   ON product_match_candidates(score DESC);
 CREATE INDEX IF NOT EXISTS idx_product_match_candidates_decision
   ON product_match_candidates(decision);
+
+
+-- ============================================================
+-- MERCADO LIVRE OAUTH 2.0 / WEBHOOKS
+-- ============================================================
+
+ALTER TABLE integration_connections
+  ADD COLUMN IF NOT EXISTS account_user_id VARCHAR(40),
+  ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT,
+  ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT,
+  ADD COLUMN IF NOT EXISTS access_token_expires_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS granted_scope TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_integration_connections_platform_user
+  ON integration_connections(platform_id, account_user_id)
+  WHERE account_user_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_integration_connections_token_expiry
+  ON integration_connections(access_token_expires_at);
+
+CREATE TABLE IF NOT EXISTS mercadolivre_oauth_states (
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  state_hash               VARCHAR(64) UNIQUE NOT NULL,
+  code_verifier_encrypted  TEXT,
+  expires_at               TIMESTAMPTZ NOT NULL,
+  used_at                  TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_mercadolivre_oauth_states_expires
+  ON mercadolivre_oauth_states(expires_at);
+
+CREATE TABLE IF NOT EXISTS mercadolivre_notifications (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  external_id           VARCHAR(120) UNIQUE,
+  resource              TEXT,
+  topic                 VARCHAR(80),
+  user_id               VARCHAR(40),
+  application_id        VARCHAR(40),
+  attempts              INTEGER,
+  sent_at               TIMESTAMPTZ,
+  received_at           TIMESTAMPTZ,
+  payload               JSONB NOT NULL DEFAULT '{}'::jsonb,
+  processed_at          TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_mercadolivre_notifications_topic
+  ON mercadolivre_notifications(topic);
+
+CREATE INDEX IF NOT EXISTS idx_mercadolivre_notifications_user
+  ON mercadolivre_notifications(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_mercadolivre_notifications_processed
+  ON mercadolivre_notifications(processed_at);
