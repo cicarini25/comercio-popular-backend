@@ -7,7 +7,8 @@ import {
   createMercadoLivreOAuthState,
   completeMercadoLivreOAuth,
   getMercadoLivreConnectionStatus,
-  refreshMercadoLivreAccessToken
+  refreshMercadoLivreAccessToken,
+  getMercadoLivreAccessToken
 } from "../integrations/mercadolivre/oauth.js";
 
 const router = express.Router();
@@ -39,7 +40,7 @@ router.post("/mercadolivre/import", requireIntegrationAdmin, async (req, res) =>
   try {
     const result = await importMercadoLivreProducts({
       items: req.body?.items,
-      accessToken: process.env.MELI_ACCESS_TOKEN,
+      accessToken: await getMercadoLivreAccessToken(),
       categoryOverride: req.body?.category
     });
 
