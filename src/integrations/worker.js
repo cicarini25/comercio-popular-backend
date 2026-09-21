@@ -88,7 +88,6 @@ export async function processNextMercadoLivreBatch(job) {
   try {
     const result = await importMercadoLivreProducts({
       items: inputs,
-      accessToken: process.env.MELI_ACCESS_TOKEN,
       categoryOverride: job.metadata?.category
     });
 

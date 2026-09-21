@@ -2,6 +2,14 @@ import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
+import {
+  buildMercadoLivreAuthorizationUrl,
+  createMercadoLivreOAuthState,
+  completeMercadoLivreOAuth,
+  getMercadoLivreConnectionStatus,
+  refreshMercadoLivreAccessToken,
+  getMercadoLivreAccessToken
+} from "../integrations/mercadolivre/oauth.js";
 
 const router = express.Router();
 const MAX_ENQUEUE_ITEMS = 30000;
@@ -32,7 +40,7 @@ router.post("/mercadolivre/import", requireIntegrationAdmin, async (req, res) =>
   try {
     const result = await importMercadoLivreProducts({
       items: req.body?.items,
-      accessToken: process.env.MELI_ACCESS_TOKEN,
+      accessToken: await getMercadoLivreAccessToken(),
       categoryOverride: req.body?.category
     });
 

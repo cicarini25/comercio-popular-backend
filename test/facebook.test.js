@@ -25,14 +25,14 @@ test('rejeita /me divergente', async()=> {
   let n=0;
   await assert.rejects(verifyFacebook('test-token',env,async()=>({ok:true,json:async()=> ++n===1 ? {data:valid} : {id:'other'}})),{status:401});
 });
-const baseUser={id:'user-1',name:'Teste',email:'test@example.test'};
+const baseUser={id:'user-1',name:'Teste',email:'test@example.test',legal_accepted_at:'2026-09-20T00:00:00.000Z',legal_version:'1'};
 async function request(body,{linked,existing,profile={id:'fb1',name:'Teste',email:'test@example.test'}}={}) {
   const queries=[];
   const client={ release(){}, async query(sql,args){
     queries.push({sql,args});
     if(sql.includes('JOIN facebook_identities')) return {rows:linked?[linked]:[]};
     if(sql.includes('lower(email)')) return {rows:existing?[existing]:[]};
-    if(sql.startsWith('INSERT INTO users')) return {rows:[baseUser]};
+    if(sql.startsWith('INSERT INTO users')) return {rows:[{...baseUser,legal_accepted_at:null,legal_version:null}]};
     return {rows:[]};
   }};
   const app=express(); app.use(express.json()); app.use('/facebook',createFacebookRouter({env,db:{connect:async()=>client},verify:async()=>profile}));
