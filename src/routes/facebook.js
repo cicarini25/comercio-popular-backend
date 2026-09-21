@@ -7,6 +7,24 @@ import { ensureLegalSchema, socialAuthResponse } from './legal.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
+function isValidCPF(cpf) {
+  const digits = String(cpf ?? '').replace(/\D/g, '');
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i += 1) sum += Number(digits[i]) * (10 - i);
+  let digit = (sum * 10) % 11;
+  if (digit === 10) digit = 0;
+  if (digit !== Number(digits[9])) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i += 1) sum += Number(digits[i]) * (11 - i);
+  digit = (sum * 10) % 11;
+  if (digit === 10) digit = 0;
+  return digit === Number(digits[10]);
+}
+
+
 export async function verifyFacebook(accessToken, env = process.env, fetcher = fetch) {
   const { FACEBOOK_APP_ID: appId, FACEBOOK_APP_SECRET: secret } = env;
   const version = env.FACEBOOK_GRAPH_VERSION || 'v26.0';
@@ -89,7 +107,11 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
           ? profile.name.trim().slice(0, 150)
           : 'Cliente';
 
-        if (hasEmail) {
+        if (!hasEmail) {
+          throw fail(400, 'O Facebook não retornou um e-mail válido. Complete o cadastro pelo Comércio Popular.');
+        }
+
+        {
           const existing = await client.query('SELECT * FROM users WHERE lower(email)=$1', [email]);
           if (existing.rows.length > 1) throw fail(409, 'Entre com o método original da sua conta.');
           user = existing.rows[0];
@@ -97,6 +119,22 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
             await client.query('ROLLBACK');
             return res.json({ status: 'link_required', profile: { name, email } });
           }
+        }
+
+        if (!user && body.action !== 'register') {
+          await client.query('ROLLBACK');
+          return res.json({ status: 'registration_required', profile: { name, email } });
+        }
+
+        if (body.action === 'register') {
+          if (typeof body.password !== 'string' || body.password.length < 6 || Buffer.byteLength(body.password) > 72) {
+            throw fail(400, 'Informe uma senha com pelo menos 6 caracteres.');
+          }
+          if (!isValidCPF(body.cpf)) throw fail(400, 'CPF inválido.');
+          if (typeof body.phone !== 'string' || String(body.phone).replace(/\D/g, '').length < 10) {
+            throw fail(400, 'Informe um telefone válido.');
+          }
+          if (user) throw fail(409, 'Este e-mail já possui uma conta. Use a opção de vinculação.');
         }
 
         if (user) {
@@ -122,7 +160,7 @@ export function createFacebookRouter({ db = pool, verify = verifyFacebook, env =
         );
       }
 
-      const auth = await socialAuthResponse(user, 'Facebook', client);
+      const auth = await socialAuthResponse(user, 'Facebook', client, env);
       await client.query('COMMIT');
       return res.json(auth);
     } catch (error) {
