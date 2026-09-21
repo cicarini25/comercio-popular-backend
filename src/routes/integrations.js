@@ -2,6 +2,13 @@ import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
+import {
+  buildMercadoLivreAuthorizationUrl,
+  createMercadoLivreOAuthState,
+  completeMercadoLivreOAuth,
+  getMercadoLivreConnectionStatus,
+  refreshMercadoLivreAccessToken
+} from "../integrations/mercadolivre/oauth.js";
 
 const router = express.Router();
 const MAX_ENQUEUE_ITEMS = 30000;
