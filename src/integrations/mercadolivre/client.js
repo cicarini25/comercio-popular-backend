@@ -24,7 +24,7 @@ export class MercadoLivreConnector extends MarketplaceConnector {
 
     for (let index = 0; index < ids.length; index += MAX_BULK) {
       const batch = ids.slice(index, index + MAX_BULK);
-      const url = new URL(`${API_BASE}/items`);
+      const url = new URL(`${API_BASE}/items/bulk`);
       url.searchParams.set("ids", batch.join(","));
 
       const headers = {
@@ -37,51 +37,99 @@ export class MercadoLivreConnector extends MarketplaceConnector {
       }
 
       const response = await fetch(url, { headers });
-      const body = await response.text();
+      const text = await response.text();
 
       if (!response.ok) {
         throw new Error(
-          `Mercado Livre /items respondeu ${response.status}: ${body.slice(0, 300)}`
+          `Mercado Livre /items/bulk: HTTP ${response.status}; ` +
+          text.slice(0, 300)
         );
       }
 
-      const data = JSON.parse(body);
+      let data;
 
-      if (!Array.isArray(data)) {
-        throw new Error("Mercado Livre retornou um formato inesperado.");
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Mercado Livre retornou uma resposta sem JSON válido.");
       }
 
-      if (data.length === 0) {
+      if (!Array.isArray(data) || data.length === 0) {
         throw new Error(
-          `Mercado Livre retornou uma lista vazia para: ${batch.join(", ")}.`
+          "Mercado Livre retornou uma lista vazia ou um formato inesperado."
         );
       }
+
+      const batchResults = [];
+      const receivedIds = new Set();
 
       for (const result of data) {
-        if (result?.code != null && Number(result.code) !== 200) {
-          const detail = result.body ?? {};
+        const status = Number(result?.status_code ?? result?.code);
+        const item = result?.body;
+        const itemId = result?.id ?? item?.id ?? "não informado";
 
+        if (status !== 200) {
           throw new Error(
-            `Mercado Livre: HTTP ${result.code}; ` +
-            `erro: ${detail.error ?? "não informado"}; ` +
-            `mensagem: ${detail.message ?? "não informada"}`
+            `Mercado Livre /items/bulk: item ${itemId}; ` +
+            `HTTP ${Number.isFinite(status) ? status : "não informado"}; ` +
+            `erro: ${item?.error ?? result?.error ?? "não informado"}; ` +
+            `mensagem: ${
+              item?.message ?? result?.message ?? "não informada"
+            }`
           );
         }
 
-        this.normalizeProduct(result);
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          throw new Error(
+            `Item ${itemId}: resposta sem os dados do produto em body.`
+          );
+        }
+
+        if (!item.id || !batch.includes(String(item.id))) {
+          throw new Error(
+            `Item ${itemId}: ID ausente ou diferente dos IDs solicitados.`
+          );
+        }
+
+        if (receivedIds.has(String(item.id))) {
+          throw new Error(`Mercado Livre retornou o item ${item.id} duplicado.`);
+        }
+
+        this.normalizeProduct(item);
+        receivedIds.add(String(item.id));
+
+        // Mantém o formato esperado pelo importador existente.
+        batchResults.push({ code: 200, body: item });
       }
 
-      results.push(...data);
+      const missingIds = batch.filter((id) => !receivedIds.has(id));
+
+      if (missingIds.length > 0) {
+        throw new Error(
+          `Mercado Livre não retornou os itens: ${missingIds.join(", ")}.`
+        );
+      }
+
+      results.push(...batchResults);
     }
 
     return results;
   }
 
   normalizeProduct(rawProduct) {
-    const item = rawProduct?.body ?? rawProduct;
+    const wrapped =
+      rawProduct &&
+      typeof rawProduct === "object" &&
+      (
+        "body" in rawProduct ||
+        "status_code" in rawProduct ||
+        "code" in rawProduct
+      );
+
+    const item = wrapped ? rawProduct.body : rawProduct;
 
     if (!item?.id) {
-      throw new Error("Resposta do Mercado Livre sem item.id.");
+      throw new Error("Resposta do Mercado Livre sem item.id dentro do produto.");
     }
 
     if (typeof item.title !== "string" || !item.title.trim()) {
