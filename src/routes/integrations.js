@@ -124,6 +124,146 @@ router.get("/shopee/search", requireIntegrationAdmin, async (req, res) => {
   }
 });
 
+// GET /api/integrations/mercadolivre/oauth/start
+// Inicia o fluxo OAuth 2.0 Server-Side do Mercado Livre.
+router.get("/mercadolivre/oauth/start", async (_req, res) => {
+  try {
+    const { state, codeChallenge } = await createMercadoLivreOAuthState();
+    return res.redirect(buildMercadoLivreAuthorizationUrl(state, codeChallenge));
+  } catch (error) {
+    console.error("Erro ao iniciar OAuth Mercado Livre:", error);
+    return res.status(503).json({
+      error: error instanceof Error ? error.message : "OAuth Mercado Livre não configurado."
+    });
+  }
+});
+
+// GET /api/integrations/mercadolivre/oauth/callback
+// URL cadastrada no DevCenter. Recebe code/state e persiste os tokens.
+router.get("/mercadolivre/oauth/callback", async (req, res) => {
+  try {
+    const result = await completeMercadoLivreOAuth({
+      code: typeof req.query.code === "string" ? req.query.code : undefined,
+      state: typeof req.query.state === "string" ? req.query.state : undefined,
+      error: typeof req.query.error === "string" ? req.query.error : undefined,
+      errorDescription: typeof req.query.error_description === "string"
+        ? req.query.error_description
+        : undefined
+    });
+
+    const successRedirect = process.env.MELI_OAUTH_SUCCESS_REDIRECT_URL?.trim();
+    if (successRedirect) {
+      const url = new URL(successRedirect);
+      url.searchParams.set("mercadolivre", "connected");
+      url.searchParams.set("user_id", result.userId);
+      return res.redirect(url.toString());
+    }
+
+    return res.status(200).type("html").send(
+      "<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\"><title>Mercado Livre conectado</title></head><body><h1>Mercado Livre conectado com sucesso.</h1><p>Você pode fechar esta janela.</p></body></html>"
+    );
+  } catch (error) {
+    console.error("Erro no callback OAuth Mercado Livre:", error);
+    return res.status(400).type("html").send(
+      `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Falha na conexão</title></head><body><h1>Não foi possível conectar o Mercado Livre.</h1><p>${error instanceof Error ? error.message : "Erro desconhecido."}</p></body></html>`
+    );
+  }
+});
+
+// GET /api/integrations/mercadolivre/oauth/status
+router.get("/mercadolivre/oauth/status", requireIntegrationAdmin, async (_req, res) => {
+  try {
+    return res.json({
+      marketplace: "mercadolivre",
+      ...(await getMercadoLivreConnectionStatus())
+    });
+  } catch (error) {
+    console.error("Erro ao consultar OAuth Mercado Livre:", error);
+    return res.status(500).json({ error: "Erro ao consultar a conexão Mercado Livre." });
+  }
+});
+
+// POST /api/integrations/mercadolivre/oauth/refresh
+router.post("/mercadolivre/oauth/refresh", requireIntegrationAdmin, async (_req, res) => {
+  try {
+    await refreshMercadoLivreAccessToken();
+    return res.json({
+      ok: true,
+      marketplace: "mercadolivre",
+      refreshed: true
+    });
+  } catch (error) {
+    console.error("Erro ao atualizar token Mercado Livre:", error);
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Falha ao atualizar token Mercado Livre."
+    });
+  }
+});
+
+// POST /api/integrations/mercadolivre/notifications
+// URL de retorno para os tópicos do Mercado Livre.
+// O Mercado Livre exige HTTP 200 em até 500 ms; o banco é atualizado de forma assíncrona.
+router.post("/mercadolivre/notifications", async (req, res) => {
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  const expectedApplicationId = process.env.MELI_APP_ID?.trim();
+  const receivedApplicationId = payload.application_id == null ? null : String(payload.application_id);
+
+  if (expectedApplicationId && receivedApplicationId && receivedApplicationId !== expectedApplicationId) {
+    return res.status(403).json({
+      error: "application_id de notificação não corresponde à aplicação configurada."
+    });
+  }
+
+  const notification = {
+    externalId: payload._id ? String(payload._id) : null,
+    resource: typeof payload.resource === "string" ? payload.resource : null,
+    topic: typeof payload.topic === "string" ? payload.topic : null,
+    userId: payload.user_id == null ? null : String(payload.user_id),
+    applicationId: receivedApplicationId,
+    attempts: Number.isFinite(Number(payload.attempts)) ? Number(payload.attempts) : null,
+    sentAt: payload.sent ? new Date(payload.sent) : null,
+    receivedAt: payload.received ? new Date(payload.received) : new Date(),
+    payload
+  };
+
+  res.status(200).json({ status: "OK" });
+
+  setImmediate(() => {
+    pool.query(
+      `INSERT INTO mercadolivre_notifications (
+          external_id,
+          resource,
+          topic,
+          user_id,
+          application_id,
+          attempts,
+          sent_at,
+          received_at,
+          payload
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
+        ON CONFLICT (external_id)
+        DO NOTHING`,
+      [
+        notification.externalId,
+        notification.resource,
+        notification.topic,
+        notification.userId,
+        notification.applicationId,
+        notification.attempts,
+        notification.sentAt,
+        notification.receivedAt,
+        JSON.stringify(notification.payload)
+      ]
+    ).catch(error => {
+      console.error("Erro assíncrono ao persistir notificação Mercado Livre:", error);
+    });
+  });
+});
+
+// URL de notificação a cadastrar no DevCenter:
+ // https://comercio-popular-backend-production.up.railway.app/api/integrations/mercadolivre/notifications
+
 // POST /api/integrations/mercadolivre/import-jobs
 // Enfileira até 30 mil URLs/ITEM_IDs. O worker processa em lotes de até 20.
 router.post("/mercadolivre/import-jobs", requireIntegrationAdmin, async (req, res) => {
