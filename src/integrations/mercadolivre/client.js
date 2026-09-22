@@ -32,10 +32,30 @@ export class MercadoLivreConnector extends MarketplaceConnector {
         throw new Error(`Mercado Livre /items/bulk respondeu ${response.status}: ${body.slice(0, 300)}`);
       }
 
-      results.push(...JSON.parse(body));
+      
+    return results;const data = JSON.parse(body);
+
+if (!Array.isArray(data)) {
+  throw new Error("Mercado Livre retornou um formato inesperado.");
+}
+
+for (const result of data) {
+  if (result.code != null && Number(result.code) !== 200) {
+    const detail = result.body ?? {};
+
+    throw new Error(
+      `Mercado Livre: HTTP ${result.code}; ` +
+      `erro: ${detail.error ?? "não informado"}; ` +
+      `mensagem: ${detail.message ?? "não informada"}`
+    );
+  }
+
+  this.normalizeProduct(result);
+}
+
+results.push(...data);
     }
 
-    return results;
   }
 
   normalizeProduct(rawProduct) {
