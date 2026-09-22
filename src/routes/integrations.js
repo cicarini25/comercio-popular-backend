@@ -200,6 +200,12 @@ router.post("/mercadolivre/oauth/refresh", requireIntegrationAdmin, async (_req,
   }
 });
 
+// GET /api/integrations/mercadolivre/notifications
+// Responde ao validador do DevCenter sem criar uma notificação.
+router.get("/mercadolivre/notifications", (_req, res) => {
+  return res.status(200).json({ status: "OK" });
+});
+
 // POST /api/integrations/mercadolivre/notifications
 // URL de retorno para os tópicos do Mercado Livre.
 // O Mercado Livre exige HTTP 200 em até 500 ms; o banco é atualizado de forma assíncrona.
