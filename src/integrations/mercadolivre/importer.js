@@ -283,6 +283,7 @@ export async function importMercadoLivreProducts({
          $1,'afiliada',$2,$3,$4,$4,$5,$6,$7,$8,$9,TRUE,'api',now(),now(),$10::jsonb
        )
        ON CONFLICT (platform_id, external_id)
+       WHERE external_id IS NOT NULL
        DO UPDATE SET
          product_id = EXCLUDED.product_id,
          product_url = EXCLUDED.product_url,
