@@ -16,7 +16,7 @@ export class MercadoLivreConnector extends MarketplaceConnector {
 
     for (let index = 0; index < ids.length; index += MAX_BULK) {
       const batch = ids.slice(index, index + MAX_BULK);
-      const url = new URL(`${API_BASE}/items/bulk`);
+      const url = new URL(`${API_BASE}/items`);
       url.searchParams.set("ids", batch.join(","));
 
       const headers = {
