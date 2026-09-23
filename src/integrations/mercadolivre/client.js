@@ -68,15 +68,14 @@ export class MercadoLivreConnector extends MarketplaceConnector {
         const item = result?.body;
         const itemId = result?.id ?? item?.id ?? "não informado";
 
-        if (status !== 200) {
-          throw new Error(
-            `Mercado Livre /items/bulk: item ${itemId}; ` +
-            `HTTP ${Number.isFinite(status) ? status : "não informado"}; ` +
-            `erro: ${item?.error ?? result?.error ?? "não informado"}; ` +
-            `mensagem: ${
-              item?.message ?? result?.message ?? "não informada"
-            }`
-          );
+         if (status !== 200) {
+         throw new Error(
+        `Mercado Livre /items/bulk: item ${itemId}; ` +
+        `HTTP ${Number.isFinite(status) ? status : "não informado"}; ` +
+       `resposta: ${JSON.stringify(result)}`
+           
+        );
+           
         }
 
         if (!item || typeof item !== "object" || Array.isArray(item)) {
