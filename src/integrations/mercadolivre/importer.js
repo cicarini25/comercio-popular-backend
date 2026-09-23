@@ -1,6 +1,6 @@
 import pool from "../../db/pool.js";
 import { MercadoLivreConnector } from "./client.js";
-import { buildNormalizedProduct, normalizeText } from "../core/normalizer.js";
+import { buildNormalizedProduct } from "../core/normalizer.js";
 import { getMercadoLivreAccessToken } from "./oauth.js";
 import {
   buildCatalogCanonicalKey,
@@ -52,6 +52,40 @@ export function uniqueMercadoLivreItemIds(items) {
   return ids;
 }
 
+// Links recebidos no POST /mercadolivre/import, separados do endereço do anúncio.
+export function parseMercadoLivreImportItems(items) {
+  const values = [];
+  const affiliateLinks = new Map();
+  for (const entry of items) {
+    const isObject = entry !== null && typeof entry === "object" && !Array.isArray(entry);
+    const value = isObject ? entry.id : entry;
+    const id = extractMercadoLivreItemId(value);
+    if (isObject && (!id || !/^MLB\d+$/.test(id))) {
+      throw new Error("Produto com link de afiliado precisa de um ID MLB válido.");
+    }
+    values.push(value);
+    if (!isObject || entry.affiliateUrl == null) continue;
+    if (typeof entry.affiliateUrl !== "string" || !entry.affiliateUrl.trim()) {
+      throw new Error(`Item ${id}: link de afiliado vazio ou inválido.`);
+    }
+    const link = entry.affiliateUrl.trim();
+    let url;
+    try { url = new URL(link); } catch {
+      throw new Error(`Item ${id}: link de afiliado inválido.`);
+    }
+    if (url.protocol !== "https:" || url.username || url.password || url.port ||
+        !["meli.la", "mercadolivre.com.br", "www.mercadolivre.com.br"].includes(url.hostname)) {
+      throw new Error(`Item ${id}: use um link HTTPS do Mercado Livre ou meli.la.`);
+    }
+    if (affiliateLinks.has(id) && affiliateLinks.get(id) !== link) {
+      throw new Error(`Item ${id}: dois links de afiliado diferentes na mesma carga.`);
+    }
+    // Preserva o link original; não gera nem altera parâmetros de atribuição.
+    affiliateLinks.set(id, link);
+  }
+  return { itemIds: uniqueMercadoLivreItemIds(values), affiliateLinks };
+}
+
 export async function importMercadoLivreProducts({
   items,
   accessToken,
@@ -65,7 +99,7 @@ export async function importMercadoLivreProducts({
     throw new Error(`A carga inicial aceita no máximo ${MAX_INPUT_ITEMS} itens por execução.`);
   }
 
-  const itemIds = uniqueMercadoLivreItemIds(items);
+  const { itemIds, affiliateLinks } = parseMercadoLivreImportItems(items);
   if (!itemIds.length) {
     throw new Error("Nenhum ITEM_ID válido do Mercado Livre foi encontrado.");
   }
@@ -102,6 +136,7 @@ export async function importMercadoLivreProducts({
       continue;
     }
 
+    const affiliateUrl = affiliateLinks.get(normalized.externalId) ?? null;
     const normalizedIdentity = buildNormalizedProduct(normalized);
     const category = categoryOverride?.trim() || normalized.category || "Mercado Livre";
     const source = "mercadolivre";
@@ -155,7 +190,8 @@ export async function importMercadoLivreProducts({
 
       await pool.query(
         `UPDATE product_offers
-         SET product_url = $1,
+         SET affiliate_url = COALESCE($10, affiliate_url),
+             product_url = $1,
              canonical_url = $1,
              price = $2,
              original_price = $3,
@@ -179,7 +215,8 @@ export async function importMercadoLivreProducts({
           normalized.availableQuantity > 0 ? "disponivel" : "indisponivel",
           normalized.raw?.seller?.nickname || null,
           JSON.stringify({ condition: normalized.condition }),
-          existingOffer.rows[0].id
+          existingOffer.rows[0].id,
+          affiliateUrl
         ]
       );
 
@@ -266,6 +303,7 @@ export async function importMercadoLivreProducts({
          offer_type,
          platform_id,
          external_id,
+         affiliate_url,
          product_url,
          canonical_url,
          price,
@@ -280,12 +318,13 @@ export async function importMercadoLivreProducts({
          metadata
        )
        VALUES (
-         $1,'afiliada',$2,$3,$4,$4,$5,$6,$7,$8,$9,TRUE,'api',now(),now(),$10::jsonb
+         $1,'afiliada',$2,$3,$11,$4,$4,$5,$6,$7,$8,$9,TRUE,'api',now(),now(),$10::jsonb
        )
        ON CONFLICT (platform_id, external_id)
        WHERE external_id IS NOT NULL
        DO UPDATE SET
          product_id = EXCLUDED.product_id,
+         affiliate_url = COALESCE(EXCLUDED.affiliate_url, product_offers.affiliate_url),
          product_url = EXCLUDED.product_url,
          canonical_url = EXCLUDED.canonical_url,
          price = EXCLUDED.price,
@@ -314,7 +353,8 @@ export async function importMercadoLivreProducts({
           importedFrom: "mercadolivre",
           pairingDecision: pairing.decision,
           matchedCandidateId: pairing.automaticMatch?.candidate?.id || null
-        })
+        }),
+        affiliateUrl
       ]
     );
 
