@@ -1,4 +1,4 @@
-import express from "express";
+
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
@@ -262,7 +262,7 @@ router.post("/mercadolivre/notifications", async (req, res) => {
 });
 
 // URL de notificação a cadastrar no DevCenter:
-// https://comercio-popular-backend-production.up.railway.app/api/integrations/mercadolivre/notifications
+ // https://comercio-popular-backend-production.up.railway.app/api/integrations/mercadolivre/notifications
 
 // POST /api/integrations/mercadolivre/import-jobs
 // Enfileira até 30 mil URLs/ITEM_IDs. O worker processa em lotes de até 20.
@@ -366,39 +366,62 @@ router.get("/jobs/:id", requireIntegrationAdmin, async (req, res) => {
 });
 
 // GET /api/integrations/mercadolivre/diagnostico
-// Consulta a própria conta usando o mesmo fluxo de token da importação.
-// A resposta não inclui o token.
 router.get("/mercadolivre/diagnostico", requireIntegrationAdmin, async (_req, res) => {
   try {
     const token = await getMercadoLivreAccessToken();
-
     const response = await fetch("https://api.mercadolibre.com/users/me", {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${token}`
-      }
+      headers: { accept: "application/json", authorization: `Bearer ${token}` }
     });
-
     const data = await response.json();
-
     return res.json({
       teste: "users/me",
       httpStatus: response.status,
       ...(response.ok
-        ? {
-            userId: data.id,
-            nickname: data.nickname,
-            siteId: data.site_id
-          }
-        : {
-            error: data.error,
-            message: data.message,
-            cause: data.cause
-          })
+        ? { userId: data.id, nickname: data.nickname, siteId: data.site_id }
+        : { error: data.error, message: data.message, cause: data.cause })
     });
   } catch (error) {
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Falha no diagnóstico."
+    });
+  }
+});
+
+// Consulta de diagnóstico: não grava nem importa produtos.
+router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req, res) => {
+  try {
+    const token = await getMercadoLivreAccessToken();
+    const url = new URL("https://api.mercadolibre.com/sites/MLB/search");
+    url.searchParams.set("seller_id", "3230452442");
+    url.searchParams.set("limit", "5");
+    const response = await fetch(url, {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20000)
+    });
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return res.json({ teste: "busca por vendedor", httpStatus: response.status,
+        error: "Resposta sem JSON válido", detalhe: raw.slice(0, 500) });
+    }
+    return res.json({
+      teste: "busca por vendedor",
+      sellerId: "3230452442",
+      httpStatus: response.status,
+      ...(response.ok ? {
+        total: data.paging?.total ?? null,
+        produtos: Array.isArray(data.results) ? data.results.map(item => ({
+          id: item.id, title: item.title, price: item.price,
+          thumbnail: item.thumbnail, permalink: item.permalink
+        })) : [],
+        formatoValido: Array.isArray(data.results)
+      } : { error: data.error, message: data.message, cause: data.cause })
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Falha no teste do vendedor."
     });
   }
 });
