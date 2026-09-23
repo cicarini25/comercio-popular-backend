@@ -426,4 +426,61 @@ router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req,
   }
 });
 
+// Diagnóstico individual protegido: não grava produtos nem links.
+router.get("/mercadolivre/teste-item", requireIntegrationAdmin, async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const itemId = "MLB4714562299";
+  try {
+    const token = await getMercadoLivreAccessToken();
+    const response = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "ComercioPopular/1.0",
+        authorization: `Bearer ${token}`
+      },
+      signal: AbortSignal.timeout(20000)
+    });
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return res.json({
+        teste: "consulta individual", itemId, httpStatus: response.status,
+        formatoValido: false, error: "Resposta sem JSON válido."
+      });
+    }
+    const valid = data !== null && typeof data === "object" && !Array.isArray(data);
+    return res.json({
+      teste: "consulta individual",
+      recurso: `/items/${itemId}`,
+      itemId,
+      httpStatus: response.status,
+      ...(response.ok ? {
+        formatoValido: valid && data.id === itemId &&
+          typeof data.title === "string" && data.title.trim().length > 0 &&
+          typeof data.price === "number" && Number.isFinite(data.price) && data.price > 0,
+        produto: valid ? {
+          id: data.id, title: data.title, price: data.price,
+          currencyId: data.currency_id, status: data.status,
+          availableQuantity: data.available_quantity,
+          imageUrl: data.pictures?.[0]?.secure_url || data.secure_thumbnail || data.thumbnail,
+          permalink: data.permalink
+        } : null
+      } : {
+        error: valid ? data.error ?? "não informado" : "Formato inesperado",
+        message: valid ? data.message ?? "não informada" : "Formato inesperado",
+        cause: valid ? data.cause ?? [] : []
+      })
+    });
+  } catch (error) {
+    return res.status(500).json({
+      teste: "consulta individual",
+      error: error?.name === "TimeoutError"
+        ? "A consulta excedeu 20 segundos."
+        : "Falha ao obter credencial ou executar a consulta individual."
+    });
+  }
+});
+
 export default router;
