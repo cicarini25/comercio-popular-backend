@@ -1,3 +1,4 @@
+import { importShopeeFeed } from "../integrations/shopee/feed-importer.js";
 import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
@@ -54,6 +55,16 @@ router.post("/mercadolivre/import", requireIntegrationAdmin, async (req, res) =>
     res.status(400).json({
       error: error instanceof Error ? error.message : "Falha na importação."
     });
+  }
+});
+
+// Importação pequena, validada e transacional. Prévia por padrão.
+router.post("/shopee/import-feed", requireIntegrationAdmin, async (req, res) => {
+  try {
+    res.json({ ok: true, marketplace: "shopee", ...await importShopeeFeed(req.body ?? {}) });
+  } catch (error) {
+    console.error("Falha na importação do feed Shopee:", error.message);
+    res.status(400).json({ error: "Importação cancelada. Confira os campos e os logs do servidor; nenhuma alteração foi confirmada." });
   }
 });
 

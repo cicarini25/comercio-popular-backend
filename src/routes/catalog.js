@@ -1,3 +1,4 @@
+import { affiliateLink } from "../integrations/shopee/feed-importer.js";
 import express from 'express';
 import pool from '../db/pool.js';
 
@@ -208,6 +209,26 @@ router.get('/platforms', async (_req, res) => {
   } catch (err) {
     console.error('Erro ao buscar plataformas do catálogo:', err);
     res.status(500).json({ error: 'Erro ao carregar as plataformas.' });
+  }
+});
+
+// Link de compra Shopee: usa exclusivamente a oferta ativa armazenada.
+router.get('/offers/:id/go', async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(400).json({ error: 'ID de oferta inválido.' });
+  }
+  try {
+    const result = await pool.query(`SELECT po.affiliate_url FROM product_offers po
+      JOIN affiliate_platforms ap ON ap.id=po.platform_id
+      JOIN products p ON p.id=po.product_id
+      WHERE po.id=$1 AND po.is_active=TRUE AND ap.is_active=TRUE
+        AND ap.code='shopee' AND p.status='ativo' AND po.offer_type='afiliada'`, [req.params.id]);
+    if (!result.rows[0]?.affiliate_url) return res.status(404).json({ error: 'Oferta indisponível.' });
+    const link = affiliateLink(result.rows[0].affiliate_url);
+    res.set('Cache-Control', 'no-store');
+    return res.redirect(302, link);
+  } catch {
+    return res.status(503).json({ error: 'Não foi possível abrir a oferta.' });
   }
 });
 
