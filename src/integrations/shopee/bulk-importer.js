@@ -7,14 +7,14 @@ export const DEFAULT_LINK_CONCURRENCY = Math.min(
   10
 );
 
-export function normalizeShopeeBulkItems(items) {
+export function normalizeShopeeBulkItems(items, { requireAffiliateLink = true } = {}) {
   if (!Array.isArray(items) || !items.length || items.length > MAX_BULK_ITEMS) {
     throw new Error(`Envie de 1 a ${MAX_BULK_ITEMS} produtos em items.`);
   }
 
   const seen = new Set();
   return items.map((row) => {
-    const product = normalizeFeedItem(row, { requireAffiliateLink: false });
+    const product = normalizeFeedItem(row, { requireAffiliateLink });
     if (seen.has(product.id)) {
       throw new Error(`ID duplicado: ${product.id}.`);
     }

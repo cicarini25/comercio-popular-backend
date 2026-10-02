@@ -82,7 +82,7 @@ router.post("/shopee/import-jobs", requireIntegrationAdmin, async (req, res) => 
 
   const client = await pool.connect();
   try {
-    const normalized = normalizeShopeeBulkItems(items);
+    const normalized = normalizeShopeeBulkItems(items, { requireAffiliateLink: true });
 
     await client.query("BEGIN");
     const platformResult = await client.query(

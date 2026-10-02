@@ -2,7 +2,6 @@ import "dotenv/config";
 import pool from "../db/pool.js";
 import { normalizeShopeeBulkItems, generateMissingShopeeAffiliateLinks } from "./shopee/bulk-importer.js";
 import { upsertShopeeProducts } from "./shopee/feed-importer.js";
-import { ShopeeAffiliateConnector } from "./shopee/client.js";
 
 const POLL_MS = Number(process.env.SHOPEE_WORKER_POLL_MS || 3000);
 const BATCH_SIZE = Math.min(Math.max(Number(process.env.SHOPEE_WORKER_BATCH_SIZE || 100), 1), 250);
@@ -119,40 +118,12 @@ async function processBatch(job) {
     return false;
   }
 
-  const connector = new ShopeeAffiliateConnector({
-    appId: process.env.SHOPEE_AFFILIATE_APP_ID,
-    secret: process.env.SHOPEE_AFFILIATE_SECRET
-  });
-
-  const generated = await generateMissingShopeeAffiliateLinks(rawProducts, connector, {
-    concurrency: process.env.SHOPEE_LINK_CONCURRENCY,
-    subIds: Array.isArray(job.metadata?.subIds) ? job.metadata.subIds : []
-  });
-
-  const failures = new Map(generated.failures.map((item) => [item.itemId, item.message]));
-  for (const [itemId, message] of failures) {
-    const row = rowById.get(itemId);
-    if (!row) continue;
-    await pool.query(
-      `UPDATE catalog_import_items
-          SET import_status='erro', error_message=$2, updated_at=now()
-        WHERE id=$1`,
-      [row.id, message.slice(0, 500)]
-    );
-  }
-
-  if (!generated.products.length) {
-    await pool.query(
-      `UPDATE catalog_import_jobs
-          SET discovered_count=discovered_count+$2, error_count=error_count+$3, updated_at=now()
-        WHERE id=$1`,
-      [job.id, rawProducts.length, failures.size]
-    );
-    return false;
-  }
-
-  const result = await upsertShopeeProducts(generated.products);
-  const ready = new Map(generated.products.map((product) => [product.id, product]));
+  // O Offer Link já vem do CSV "BatchProductLinks" e é obrigatório.
+  // O worker NÃO gera links pela Open API durante a importação em massa.
+  // Isso mantém a carga determinística e elimina a dependência de
+  // SHOPEE_AFFILIATE_APP_ID/SHOPEE_AFFILIATE_SECRET.
+  const result = await upsertShopeeProducts(rawProducts);
+  const ready = new Map(rawProducts.map((product) => [product.id, product]));
   const offers = new Map(result.offers.map((offer) => [offer.itemId, offer]));
 
   for (const [itemId, row] of rowById) {
@@ -180,7 +151,7 @@ async function processBatch(job) {
             error_count=error_count+$5,
             updated_at=now()
       WHERE id=$1`,
-    [job.id, pending.rows.length, imported, updated, failures.size + (pending.rows.length - rawProducts.length)]
+    [job.id, pending.rows.length, imported, updated, (pending.rows.length - rawProducts.length)]
   );
 
   return false;

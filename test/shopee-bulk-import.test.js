@@ -16,10 +16,25 @@ const base = {
   product_link: 'https://shopee.com.br/product/1862185018/58263625348'
 };
 
-test('normaliza item de feed sem exigir link de afiliado', () => {
-  const [product] = normalizeShopeeBulkItems([base]);
+test('exige Offer Link no lote de importação por padrão', () => {
+  assert.throws(
+    () => normalizeShopeeBulkItems([base]),
+    /link de afiliado ausente/i
+  );
+});
+
+test('permite normalização sem Offer Link somente quando explicitamente solicitado', () => {
+  const [product] = normalizeShopeeBulkItems([base], { requireAffiliateLink: false });
   assert.equal(product.id, base.itemid);
   assert.equal(product.affiliateUrl, undefined);
+});
+
+test('preserva Offer Link fornecido pelo CSV', () => {
+  const [product] = normalizeShopeeBulkItems([{
+    ...base,
+    affiliateUrl: 'https://s.shopee.com.br/existing1'
+  }]);
+  assert.equal(product.affiliateUrl, 'https://s.shopee.com.br/existing1');
 });
 
 test('gera links ausentes em paralelo controlado e preserva os já existentes', async () => {
