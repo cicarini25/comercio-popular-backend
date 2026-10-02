@@ -119,23 +119,15 @@ export async function upsertShopeeProducts(products, db = pool) {
       const metadata = JSON.stringify({ importedFrom: 'shopee-feed', shopId: p.shopId, availabilityKnown: false });
 
       if (productId) {
-        // Nunca substitua uma imagem real por placeholder/URL inválida vinda de feed de teste.
-        const incomingImage = String(p.image || '').trim();
-        const isPlaceholder = /placehold\.co|text=Shopee/i.test(incomingImage);
-        await client.query(`UPDATE products SET title=$1, description=$2, price=$3,
-          image_url=CASE
-            WHEN $4 = TRUE THEN image_url
-            ELSE $5
-          END,
-          category=$6, affiliate_link=$7, status='ativo', is_achadinho=TRUE,
-          metadata=COALESCE(metadata,'{}'::jsonb)||$8::jsonb,
-          updated_at=now() WHERE id=$9 AND source='shopee'`,
-        [p.title,p.description,p.price,isPlaceholder,incomingImage,p.category,p.affiliateUrl,metadata,productId]);
+        await client.query(`UPDATE products SET title=$1, description=$2, price=$3, image_url=$4,
+          category=$5, affiliate_link=$6, metadata=COALESCE(metadata,'{}'::jsonb)||$7::jsonb,
+          updated_at=now() WHERE id=$8 AND source='shopee'`,
+        [p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,metadata,productId]);
       } else {
         const inserted = await client.query(`INSERT INTO products
           (source, external_id, title, description, price, image_url, category, affiliate_link,
-           stock_units, product_kind, status, is_achadinho, metadata)
-          VALUES ('shopee',$1,$2,$3,$4,$5,$6,$7,NULL,'afiliado','ativo',TRUE,$8::jsonb) RETURNING id`,
+           stock_units, product_kind, status, metadata)
+          VALUES ('shopee',$1,$2,$3,$4,$5,$6,$7,NULL,'afiliado','ativo',$8::jsonb) RETURNING id`,
         [p.id,p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,metadata]);
         productId = inserted.rows[0].id;
       }
@@ -147,7 +139,7 @@ export async function upsertShopeeProducts(products, db = pool) {
         ON CONFLICT (platform_id,external_id) WHERE external_id IS NOT NULL
         DO UPDATE SET product_url=EXCLUDED.product_url,affiliate_url=EXCLUDED.affiliate_url,
           price=EXCLUDED.price,original_price=EXCLUDED.original_price,stock_units=NULL,
-          availability='desconhecida',seller_name=EXCLUDED.seller_name,is_active=TRUE,sync_status='feed',
+          availability='desconhecida',seller_name=EXCLUDED.seller_name,sync_status='feed',
           last_synced_at=now(),updated_at=now(),metadata=EXCLUDED.metadata
         RETURNING id`,
       [productId,platformId,p.id,p.productUrl,p.affiliateUrl,p.price,p.originalPrice,p.seller,metadata]);
