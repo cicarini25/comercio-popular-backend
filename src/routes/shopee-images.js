@@ -36,7 +36,7 @@ function imagePath(itemId) {
 
 router.get('/ui', (_req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.type('html').send(\`<!doctype html>
+  res.type('html').send(`<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
@@ -126,7 +126,7 @@ document.getElementById('finalize').onclick=async()=>{
 };
 refresh().catch(e=>show(e.message));
 </script>
-</body></html>\`);
+</body></html>`);
 });
 
 router.get('/status', async (_req, res) => {
@@ -182,11 +182,11 @@ router.post('/finalize', requireIntegrationAdmin, async (req, res) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('shopee-image-restore'))");
 
     const existing = await client.query(
-      \`SELECT external_id
+      `SELECT external_id
          FROM products
         WHERE source = 'shopee'
           AND external_id = ANY($1::text[])
-        FOR UPDATE\`,
+        FOR UPDATE`,
       [IMAGE_IDS]
     );
 
@@ -197,12 +197,12 @@ router.post('/finalize', requireIntegrationAdmin, async (req, res) => {
     }
 
     const result = await client.query(
-      \`UPDATE products
+      `UPDATE products
           SET image_url = $1 || external_id || '.jpg',
               updated_at = now()
         WHERE source = 'shopee'
           AND external_id = ANY($2::text[])
-       RETURNING external_id\`,
+       RETURNING external_id`,
       [urlBase, IMAGE_IDS]
     );
 
