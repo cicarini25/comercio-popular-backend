@@ -29,16 +29,24 @@ export async function generateMissingShopeeAffiliateLinks(
   { concurrency = DEFAULT_LINK_CONCURRENCY, subIds = [] } = {}
 ) {
   if (!Array.isArray(products) || !products.length) return { products: [], failures: [] };
-  if (!connector?.isConfigured?.()) {
-    throw new Error(
-      'Shopee Affiliate Open API não configurada. Defina SHOPEE_AFFILIATE_APP_ID e SHOPEE_AFFILIATE_SECRET.'
-    );
-  }
-
   const output = products.map((product) => ({ ...product }));
   const missingIndexes = output
     .map((product, index) => (product.affiliateUrl ? null : index))
     .filter((index) => index !== null);
+
+  if (!missingIndexes.length) {
+    return { products: output, failures: [] };
+  }
+
+  if (!connector?.isConfigured?.()) {
+    return {
+      products: output.filter((product) => product.affiliateUrl),
+      failures: missingIndexes.map((index) => ({
+        itemId: output[index].id,
+        message: 'Link de afiliado ausente e Shopee Affiliate Open API não configurada.'
+      }))
+    };
+  }
 
   let cursor = 0;
   const failures = [];

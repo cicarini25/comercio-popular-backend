@@ -7,6 +7,7 @@ import { upsertShopeeProducts } from "./shopee/feed-importer.js";
 
 const POLL_MS = Number(process.env.INTEGRATION_WORKER_POLL_MS || 3000);
 const BATCH_SIZE = Math.min(Number(process.env.INTEGRATION_WORKER_BATCH_SIZE || 20), 20);
+const SHOPEE_BATCH_SIZE = Math.min(Math.max(Number(process.env.SHOPEE_WORKER_BATCH_SIZE || 100), 1), 250);
 const MAX_JOB_ATTEMPTS = Number(process.env.INTEGRATION_WORKER_MAX_ATTEMPTS || 3);
 const LEASE_MINUTES = Number(process.env.INTEGRATION_WORKER_LEASE_MINUTES || 30);
 
@@ -78,7 +79,7 @@ export async function processNextShopeeBatch(job) {
         AND import_status IN ('pending', 'retry')
       ORDER BY created_at ASC
       LIMIT $2`,
-    [job.id, BATCH_SIZE]
+    [job.id, SHOPEE_BATCH_SIZE]
   );
 
   if (!pending.rows.length) {
@@ -372,7 +373,7 @@ async function finalizeJob(jobId) {
 
 export async function runWorker() {
   console.log(
-    `Comércio Popular integration worker iniciado (poll=${POLL_MS}ms, batch=${BATCH_SIZE}).`
+    `Comércio Popular integration worker iniciado (poll=${POLL_MS}ms, meliBatch=${BATCH_SIZE}, shopeeBatch=${SHOPEE_BATCH_SIZE}).`
   );
 
   await recoverStaleJobs();
