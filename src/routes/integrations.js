@@ -4,6 +4,7 @@ import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
 import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
+import { resolveShopeeMainImage } from "../integrations/shopee/image-resolver.js";
 import {
   buildMercadoLivreAuthorizationUrl,
   createMercadoLivreOAuthState,
@@ -144,6 +145,74 @@ router.post("/shopee/import-jobs", requireIntegrationAdmin, async (req, res) => 
   } finally {
     client.release();
   }
+});
+
+// POST /api/integrations/shopee/refresh-images
+// Recupera a imagem principal diretamente da página pública do produto e atualiza o catálogo.
+router.post("/shopee/refresh-images", requireIntegrationAdmin, async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Envie 'items' com itemid e product_link." });
+  if (items.length > 250) return res.status(400).json({ error: "Atualize no máximo 250 imagens por chamada." });
+
+  const concurrency = Math.min(Math.max(Number(req.body?.concurrency) || 5, 1), 10);
+  let cursor = 0;
+  const results = [];
+  const failures = [];
+
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      const item = items[index] || {};
+      const itemId = String(item.itemid ?? item.itemId ?? "").trim();
+      const productUrl = String(item.product_link ?? item.productUrl ?? "").trim();
+
+      if (!/^\d+$/.test(itemId) || !productUrl) {
+        failures.push({ itemId, message: "ItemId/Product Link inválido." });
+        continue;
+      }
+
+      try {
+        const imageUrl = await resolveShopeeMainImage(productUrl);
+        const result = await pool.query(
+          `UPDATE products
+              SET image_url=$2, updated_at=now()
+            WHERE source='shopee' AND external_id=$1
+            RETURNING id`,
+          [itemId, imageUrl]
+        );
+
+        await pool.query(
+          `UPDATE product_offers
+              SET updated_at=now(), metadata=COALESCE(metadata,'{}'::jsonb)||$3::jsonb
+            WHERE platform_id=(SELECT id FROM affiliate_platforms WHERE code='shopee' LIMIT 1)
+              AND external_id=$1`,
+          [itemId, imageUrl, JSON.stringify({ imageResolvedFrom: "shopee-product-page", imageUrl })]
+        );
+
+        if (!result.rows[0]) {
+          failures.push({ itemId, message: "Produto Shopee não encontrado no catálogo." });
+          continue;
+        }
+        results.push({ itemId, imageUrl });
+      } catch (error) {
+        failures.push({
+          itemId,
+          message: error instanceof Error ? error.message : "Falha ao obter imagem."
+        });
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return res.json({
+    ok: failures.length === 0,
+    marketplace: "shopee",
+    processed: results.length,
+    failed: failures.length,
+    results,
+    failures
+  });
 });
 
 // GET /api/integrations/shopee/health
