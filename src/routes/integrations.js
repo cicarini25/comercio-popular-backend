@@ -3,6 +3,7 @@ import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
+import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
 import {
   buildMercadoLivreAuthorizationUrl,
   createMercadoLivreOAuthState,
@@ -65,6 +66,83 @@ router.post("/shopee/import-feed", requireIntegrationAdmin, async (req, res) => 
   } catch (error) {
     console.error("Falha na importação do feed Shopee:", error.message);
     res.status(400).json({ error: "Importação cancelada. Confira os campos e os logs do servidor; nenhuma alteração foi confirmada." });
+  }
+});
+
+// POST /api/integrations/shopee/import-jobs
+// Importação em massa: enfileira até 30 mil produtos. O worker gera links de afiliado e grava em lotes.
+router.post("/shopee/import-jobs", requireIntegrationAdmin, async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) {
+    return res.status(400).json({ error: "Envie 'items' com produtos do feed Shopee." });
+  }
+  if (items.length > MAX_BULK_ITEMS) {
+    return res.status(400).json({ error: `A fila Shopee aceita até ${MAX_BULK_ITEMS} produtos por job.` });
+  }
+
+  const client = await pool.connect();
+  try {
+    const normalized = normalizeShopeeBulkItems(items);
+
+    await client.query("BEGIN");
+    const platformResult = await client.query(
+      "SELECT id FROM affiliate_platforms WHERE code = 'shopee' AND is_active = TRUE LIMIT 1"
+    );
+    const platformId = platformResult.rows[0]?.id;
+    if (!platformId) throw new Error("Plataforma Shopee não está cadastrada/ativa.");
+
+    const rawSubIds = Array.isArray(req.body?.subIds) ? req.body.subIds : [];
+    const subIds = rawSubIds
+      .filter((value) => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    const jobResult = await client.query(
+      `INSERT INTO catalog_import_jobs (
+         platform_id, source_type, status, requested_count, metadata
+       )
+       VALUES ($1, 'shopee_feed', 'queued', $2, $3::jsonb)
+       RETURNING id, status, requested_count, created_at`,
+      [platformId, normalized.length, JSON.stringify({ autoGenerateAffiliateLinks: true, subIds })]
+    );
+    const jobId = jobResult.rows[0].id;
+
+    const itemPayload = normalized.map((product, index) => ({
+      external_id: product.id,
+      source_url: product.productUrl,
+      normalized_url: product.productUrl,
+      raw_payload: JSON.stringify(items[index]),
+      normalized_payload: JSON.stringify(product)
+    }));
+
+    await client.query(
+      `INSERT INTO catalog_import_items (
+         job_id, external_id, source_url, normalized_url, raw_payload, normalized_payload, import_status
+       )
+       SELECT $1, data.external_id, data.source_url, data.normalized_url,
+              data.raw_payload::jsonb, data.normalized_payload::jsonb, 'pending'
+         FROM jsonb_to_recordset($2::jsonb) AS data(
+           external_id text, source_url text, normalized_url text,
+           raw_payload text, normalized_payload text
+         )`,
+      [jobId, JSON.stringify(itemPayload)]
+    );
+
+    await client.query("COMMIT");
+    return res.status(202).json({
+      ok: true,
+      marketplace: "shopee",
+      job: { id: jobId, status: "queued", requested: normalized.length, worker: "integration" }
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao enfileirar importação Shopee:", error);
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Falha ao criar job Shopee."
+    });
+  } finally {
+    client.release();
   }
 });
 
