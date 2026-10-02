@@ -48,7 +48,7 @@ app.use('/api/auth/legal', legalRoutes);
 app.use('/api/auth', tiktokRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/catalog', catalogRoutes);
-app.use('/shopee-images', (await import('express')).default.static('/data/shopee-images', { maxAge: '7d', fallthrough: false }));
+app.use('/shopee-images', express.static('/data/shopee-images', { maxAge: '7d', fallthrough: false }));
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/integrations/shopee-images', shopeeImageRoutes);
 
