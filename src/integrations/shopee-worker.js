@@ -3,7 +3,6 @@ import pool from "../db/pool.js";
 import { normalizeShopeeBulkItems, generateMissingShopeeAffiliateLinks } from "./shopee/bulk-importer.js";
 import { upsertShopeeProducts } from "./shopee/feed-importer.js";
 import { ShopeeAffiliateConnector } from "./shopee/client.js";
-import { resolveShopeeMainImage } from "./shopee/image-resolver.js";
 
 const POLL_MS = Number(process.env.SHOPEE_WORKER_POLL_MS || 3000);
 const BATCH_SIZE = Math.min(Math.max(Number(process.env.SHOPEE_WORKER_BATCH_SIZE || 100), 1), 250);
@@ -152,25 +151,8 @@ async function processBatch(job) {
     return false;
   }
 
-  // Se o feed trouxe placeholder/sem imagem, tenta resolver a imagem real na página do produto.
-  const productsWithImages = await Promise.all(generated.products.map(async (product) => {
-    const currentImage = String(product.image || "");
-    if (currentImage && !currentImage.includes("placehold.co")) return product;
-    try {
-      const image = await resolveShopeeMainImage(product.productUrl);
-      return { ...product, image };
-    } catch (error) {
-      console.warn(
-        "Imagem Shopee não resolvida para",
-        product.id,
-        error instanceof Error ? error.message : "erro desconhecido"
-      );
-      return product;
-    }
-  }));
-
-  const result = await upsertShopeeProducts(productsWithImages);
-  const ready = new Map(productsWithImages.map((product) => [product.id, product]));
+  const result = await upsertShopeeProducts(generated.products);
+  const ready = new Map(generated.products.map((product) => [product.id, product]));
   const offers = new Map(result.offers.map((offer) => [offer.itemId, offer]));
 
   for (const [itemId, row] of rowById) {
