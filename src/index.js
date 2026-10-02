@@ -8,6 +8,7 @@ import orderRoutes from './routes/orders.js';
 import tiktokRoutes from './routes/tiktok.js';
 import catalogRoutes from './routes/catalog.js';
 import integrationRoutes from './routes/integrations.js';
+import shopeeImageRoutes from './routes/shopee-images.js';
 import { completeMercadoLivreOAuth } from './integrations/mercadolivre/oauth.js';
 
 const app = express();
@@ -47,7 +48,9 @@ app.use('/api/auth/legal', legalRoutes);
 app.use('/api/auth', tiktokRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/catalog', catalogRoutes);
+app.use('/shopee-images', (await import('express')).default.static('/data/shopee-images', { maxAge: '7d', fallthrough: false }));
 app.use('/api/integrations', integrationRoutes);
+app.use('/api/integrations/shopee-images', shopeeImageRoutes);
 
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
