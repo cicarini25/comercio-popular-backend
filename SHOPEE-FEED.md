@@ -1,13 +1,23 @@
-# Comércio Popular — primeira importação Shopee
+# Comércio Popular — importação Shopee em massa
 
-Esta entrega adiciona importação de produtos selecionados do feed CSV, com links originais gerados no painel de afiliados. Não exige Open API da Shopee. Não gera links automaticamente e não importa os 100 mil produtos sem links associados.
+Esta versão mantém a importação síncrona para cargas curtas e adiciona uma fila de importação em massa para até 30 mil produtos por job. O worker usa a Shopee Affiliate Open API para gerar automaticamente os links de afiliado que não estiverem presentes no feed e grava os produtos em lotes, sem exigir preparação manual de cada link.
 
 ## Arquivos
 
-Alterados: src/routes/integrations.js e src/routes/catalog.js.
-Novo módulo: src/integrations/shopee/feed-importer.js.
-Apoio: scripts/prepare-shopee-feed.py, examples/shopee-links.json, examples/shopee-preview.json, Testar-Shopee.ps1, test/shopee-feed.test.js.
+Alterados: src/routes/integrations.js, src/integrations/worker.js, src/integrations/shopee/feed-importer.js e src/index.js.
+Novo módulo: src/integrations/shopee/bulk-importer.js.
+Testes: test/shopee-feed.test.js e test/shopee-bulk-import.test.js.
 Não há alteração de dependências ou esquema. Usa as tabelas da migração já existente.
+
+## Importação em massa
+
+A rota `POST /api/integrations/shopee/import-jobs` recebe até 30 mil produtos por job. Ela retorna HTTP 202 com um `job.id`. O worker de integrações processa os itens em lotes de até 20, gera os links de afiliado ausentes via Shopee Affiliate Open API com concorrência controlada e grava cada lote em transação.
+
+Consulte o progresso em `GET /api/integrations/jobs/{id}`. Os estados dos itens distinguem importados, atualizados e erros. Um item que falhar não desfaz os lotes anteriores que já foram confirmados.
+
+Para processamento automático, mantenha um processo Railway executando `npm run worker:integrations` além do serviço web. Configure `SHOPEE_AFFILIATE_APP_ID`, `SHOPEE_AFFILIATE_SECRET` e, opcionalmente, `SHOPEE_LINK_CONCURRENCY` de 1 a 10 (padrão 5).
+
+O payload da fila deve conter os campos necessários do feed: `itemid`, `title`, `price`/`sale_price`, `image_link` e `product_link`. `affiliateUrl` é opcional na fila.
 
 ## Publicar e testar
 
@@ -35,8 +45,8 @@ Consulta dos produtos: /api/catalog/products?platform=shopee.
 
 - Amostra extraída do feed baixado em 01/10/2026. Preços são um retrato daquela carga. Atualize o CSV antes de usar os dados comercialmente.
 - Estoque e disponibilidade não constam no feed: stock_units=NULL e availability=desconhecida. Não inventamos estoque, frete ou comissão.
-- Os links do CSV são genéricos. Cada item enviado deve conter affiliateUrl gerado no painel para aquele produto. O administrador é responsável pelo pareamento; o importador valida formato/domínio, não confirma comissão nem resolve cada link na importação.
-- A prévia é o padrão; só dryRun=false grava. Máximo 100 produtos por requisição. Todas as gravações da carga estão em uma transação.
+- Na rota síncrona antiga, cada item ainda precisa conter `affiliateUrl` no formato curto aceito. Na rota em massa, o `affiliateUrl` pode faltar e será gerado pelo worker através da API oficial configurada.
+- A prévia síncrona continua como padrão; só `dryRun=false` grava. A fila em massa aceita até 30 mil itens por job e grava em lotes; um erro de um item não desfaz os lotes anteriores bem-sucedidos.
 - Mantém inativos os produtos/ofertas anteriormente desativados na atualização.
 - A rota pública adicionada é exclusiva Shopee. O frontend não veio neste ZIP e precisa ser conferido/adaptado para usar /api/catalog/offers/{offerId}/go no botão Comprar na Shopee.
 - Não há agenda automática nem publicação feita por esta entrega. Uma rotina de atualização futura deve preservar os links aprovados, tratar ofertas que saíram do feed e registrar falhas.
