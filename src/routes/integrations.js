@@ -146,6 +146,40 @@ router.post("/shopee/import-jobs", requireIntegrationAdmin, async (req, res) => 
   }
 });
 
+// POST /api/integrations/shopee/repair-catalog-state
+// Reativa ofertas/produtos Shopee e marca-os como achadinhos, sem alterar títulos, preços ou imagens.
+router.post("/shopee/repair-catalog-state", requireIntegrationAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      WITH shopee AS (
+        SELECT id FROM affiliate_platforms WHERE code='shopee' LIMIT 1
+      ),
+      offers AS (
+        UPDATE product_offers po
+           SET is_active=TRUE, updated_at=now()
+         FROM shopee s
+        WHERE po.platform_id=s.id
+        RETURNING po.product_id
+      )
+      UPDATE products p
+         SET status='ativo',
+             is_achadinho=TRUE,
+             updated_at=now()
+       WHERE p.source='shopee'
+         AND (p.status <> 'ativo' OR p.is_achadinho=FALSE OR p.id IN (SELECT product_id FROM offers))
+      RETURNING p.id
+    `);
+    return res.json({
+      ok: true,
+      marketplace: "shopee",
+      repaired: result.rowCount
+    });
+  } catch (error) {
+    console.error("Erro ao reparar estado do catálogo Shopee:", error);
+    return res.status(500).json({ error: "Não foi possível reparar o estado do catálogo Shopee." });
+  }
+});
+
 // GET /api/integrations/shopee/health
 router.get("/shopee/health", requireIntegrationAdmin, async (_req, res) => {
   const connector = new ShopeeAffiliateConnector({
