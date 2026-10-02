@@ -1,0 +1,1 @@
+Bulk import uses pre-generated Offer Links when present. Open API credentials are only needed for items without an affiliate URL.
