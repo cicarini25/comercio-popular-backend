@@ -146,6 +146,48 @@ router.post("/shopee/import-jobs", requireIntegrationAdmin, async (req, res) => 
   }
 });
 
+// POST /api/integrations/shopee/repair-catalog-state
+// Reativa somente o estado de exibição dos produtos/ofertas Shopee.
+// Não altera título, preço, link de afiliado ou imagem.
+router.post("/shopee/repair-catalog-state", requireIntegrationAdmin, async (_req, res) => {
+  try {
+    const offers = await pool.query(`
+      UPDATE product_offers
+         SET is_active = TRUE,
+             updated_at = now()
+       WHERE platform_id = (
+         SELECT id FROM affiliate_platforms
+          WHERE code = 'shopee'
+          LIMIT 1
+       )
+         AND COALESCE(affiliate_url, '') <> ''
+      RETURNING product_id
+    `);
+
+    const products = await pool.query(`
+      UPDATE products
+         SET status = 'ativo',
+             is_achadinho = TRUE,
+             updated_at = now()
+       WHERE source = 'shopee'
+         AND COALESCE(affiliate_link, '') <> ''
+      RETURNING id
+    `);
+
+    return res.json({
+      ok: true,
+      marketplace: "shopee",
+      repaired_offers: offers.rowCount,
+      repaired_products: products.rowCount
+    });
+  } catch (error) {
+    console.error("Erro no reparo seguro do catálogo Shopee:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Falha ao reparar catálogo Shopee."
+    });
+  }
+});
+
 // GET /api/integrations/shopee/health
 router.get("/shopee/health", requireIntegrationAdmin, async (_req, res) => {
   const connector = new ShopeeAffiliateConnector({
