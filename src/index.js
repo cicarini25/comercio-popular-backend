@@ -13,7 +13,7 @@ import { completeMercadoLivreOAuth } from './integrations/mercadolivre/oauth.js'
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '25mb' }));
 
 app.get('/', async (req, res) => {
   if (req.query.code || req.query.error) {
