@@ -1,6 +1,9 @@
 import "dotenv/config";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts } from "./mercadolivre/importer.js";
+import { ShopeeAffiliateConnector } from "./shopee/client.js";
+import { normalizeShopeeBulkItems, generateMissingShopeeAffiliateLinks } from "./shopee/bulk-importer.js";
+import { upsertShopeeProducts } from "./shopee/feed-importer.js";
 
 const POLL_MS = Number(process.env.INTEGRATION_WORKER_POLL_MS || 3000);
 const BATCH_SIZE = Math.min(Number(process.env.INTEGRATION_WORKER_BATCH_SIZE || 20), 20);
@@ -65,6 +68,175 @@ export async function claimNextImportJob() {
   } finally {
     client.release();
   }
+}
+
+export async function processNextShopeeBatch(job) {
+  const pending = await pool.query(
+    `SELECT id, external_id, raw_payload, normalized_payload
+       FROM catalog_import_items
+      WHERE job_id = $1
+        AND import_status IN ('pending', 'retry')
+      ORDER BY created_at ASC
+      LIMIT $2`,
+    [job.id, BATCH_SIZE]
+  );
+
+  if (!pending.rows.length) {
+    await finalizeJob(job.id);
+    return { processed: 0, finished: true };
+  }
+
+  const connector = new ShopeeAffiliateConnector({
+    appId: process.env.SHOPEE_AFFILIATE_APP_ID,
+    secret: process.env.SHOPEE_AFFILIATE_SECRET
+  });
+
+  if (!connector.isConfigured()) {
+    throw new Error(
+      'Shopee Affiliate Open API não configurada. Defina SHOPEE_AFFILIATE_APP_ID e SHOPEE_AFFILIATE_SECRET.'
+    );
+  }
+
+  const validRows = [];
+  const invalidRows = [];
+
+  for (const row of pending.rows) {
+    try {
+      const raw = row.raw_payload && typeof row.raw_payload === 'object' ? row.raw_payload : {};
+      const stored = row.normalized_payload && typeof row.normalized_payload === 'object'
+        ? row.normalized_payload
+        : {};
+      const source = { ...raw, ...stored, itemid: row.external_id || raw.itemid || raw.itemId };
+      validRows.push({ row, product: normalizeShopeeBulkItems([source])[0] });
+    } catch (error) {
+      invalidRows.push({
+        row,
+        message: error instanceof Error ? error.message : 'Produto Shopee inválido.'
+      });
+    }
+  }
+
+  if (invalidRows.length) {
+    for (const { row, message } of invalidRows) {
+      await pool.query(
+        `UPDATE catalog_import_items
+            SET import_status = 'erro', error_message = $2, updated_at = now()
+          WHERE id = $1`,
+        [row.id, message.slice(0, 500)]
+      );
+    }
+  }
+
+  const validCount = validRows.length;
+  if (!validCount) {
+    await pool.query(
+      `UPDATE catalog_import_jobs
+          SET discovered_count = discovered_count + $2,
+              error_count = error_count + $2,
+              updated_at = now()
+        WHERE id = $1`,
+      [job.id, invalidRows.length]
+    );
+    return { processed: pending.rows.length, finished: false, result: { imported: 0, updated: 0, errors: invalidRows.length } };
+  }
+
+  const rawProducts = validRows.map(({ product }) => product);
+  const generated = await generateMissingShopeeAffiliateLinks(rawProducts, connector, {
+    concurrency: process.env.SHOPEE_LINK_CONCURRENCY,
+    subIds: Array.isArray(job.metadata?.subIds) ? job.metadata.subIds : []
+  });
+
+  const failureById = new Map(generated.failures.map((item) => [item.itemId, item.message]));
+  for (const { row } of validRows) {
+    const message = failureById.get(row.external_id);
+    if (!message) continue;
+    await pool.query(
+      `UPDATE catalog_import_items
+          SET import_status = 'erro', error_message = $2, updated_at = now()
+        WHERE id = $1`,
+      [row.id, message.slice(0, 500)]
+    );
+  }
+
+  if (!generated.products.length) {
+    await pool.query(
+      `UPDATE catalog_import_jobs
+          SET discovered_count = discovered_count + $2,
+              error_count = error_count + $3,
+              updated_at = now()
+        WHERE id = $1`,
+      [job.id, validCount, generated.failures.length]
+    );
+    return {
+      processed: pending.rows.length,
+      finished: false,
+      result: { imported: 0, updated: 0, errors: invalidRows.length + generated.failures.length }
+    };
+  }
+
+  let result;
+  try {
+    result = await upsertShopeeProducts(generated.products);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha ao gravar lote Shopee.';
+    const retryIds = validRows
+      .filter(({ row }) => !failureById.has(row.external_id))
+      .map(({ row }) => row.id);
+    if (retryIds.length) {
+      await pool.query(
+        `UPDATE catalog_import_items
+            SET import_status = 'retry', error_message = $2, updated_at = now()
+          WHERE id = ANY($1::uuid[])`,
+        [retryIds, message.slice(0, 500)]
+      );
+    }
+    throw error;
+  }
+
+  const readyByItem = new Map(generated.products.map((product) => [product.id, product]));
+  const offerByItem = new Map(result.offers.map((offer) => [offer.itemId, offer]));
+
+  for (const { row, product } of validRows) {
+    const offer = offerByItem.get(product.id);
+    if (!offer) continue;
+    const readyProduct = readyByItem.get(product.id);
+    await pool.query(
+      `UPDATE catalog_import_items
+          SET import_status = $2,
+              product_id = $3,
+              normalized_payload = normalized_payload || $4::jsonb,
+              error_message = NULL,
+              updated_at = now()
+        WHERE id = $1`,
+      [
+        row.id,
+        offer.action === 'updated' ? 'atualizado' : 'importado',
+        offer.productId,
+        JSON.stringify({ affiliateUrl: readyProduct?.affiliateUrl })
+      ]
+    );
+  }
+
+  const imported = result.offers.filter((offer) => offer.action === 'imported').length;
+  const updated = result.offers.filter((offer) => offer.action === 'updated').length;
+  const errors = invalidRows.length + generated.failures.length;
+
+  await pool.query(
+    `UPDATE catalog_import_jobs
+        SET discovered_count = discovered_count + $2,
+            imported_count = imported_count + $3,
+            updated_count = updated_count + $4,
+            error_count = error_count + $5,
+            updated_at = now()
+      WHERE id = $1`,
+    [job.id, pending.rows.length, imported, updated, errors]
+  );
+
+  return {
+    processed: pending.rows.length,
+    finished: false,
+    result: { imported, updated, errors }
+  };
 }
 
 export async function processNextMercadoLivreBatch(job) {
@@ -219,13 +391,18 @@ export async function runWorker() {
         [job.platform_id]
       );
 
-      if (platform.rows[0]?.code !== "mercadolivre") {
-        throw new Error("Worker atual suporta apenas o conector Mercado Livre.");
+      const platformCode = platform.rows[0]?.code;
+      if (!platformCode) {
+        throw new Error("Plataforma da importação não encontrada.");
       }
 
       let finished = false;
       while (!finished && !stopping) {
-        const batchResult = await processNextMercadoLivreBatch(job);
+        const batchResult = platformCode === "mercadolivre"
+          ? await processNextMercadoLivreBatch(job)
+          : platformCode === "shopee"
+            ? await processNextShopeeBatch(job)
+            : (() => { throw new Error(`Worker sem suporte para a plataforma ${platformCode}.`); })();
         finished = batchResult.finished;
       }
     } catch (error) {
