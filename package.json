@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/start-all.js",
     "dev": "node --watch src/index.js",
     "migrate": "node src/db/migrate.js",
     "migrate:facebook": "node src/db/migrate-facebook.js",
