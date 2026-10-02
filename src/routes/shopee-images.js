@@ -175,7 +175,7 @@ router.post('/finalize', requireIntegrationAdmin, async (req, res) => {
       await fs.access(imagePath(id));
     }
 
-    const publicBase = (process.env.BACKEND_PUBLIC_URL || ('https://' + req.get('host'))).replace(/\\/+$/, '');
+    const publicBase = (process.env.BACKEND_PUBLIC_URL || ('https://' + req.get('host'))).replace(/\/+$/, '');
     const urlBase = publicBase + '/shopee-images/';
 
     await client.query('BEGIN');
