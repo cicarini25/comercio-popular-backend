@@ -4,10 +4,20 @@ Esta versão mantém a importação síncrona para cargas curtas e adiciona uma 
 
 ## Arquivos
 
-Alterados: src/routes/integrations.js e src/routes/catalog.js.
-Novo módulo: src/integrations/shopee/feed-importer.js.
-Apoio: scripts/prepare-shopee-feed.py, examples/shopee-links.json, examples/shopee-preview.json, Testar-Shopee.ps1, test/shopee-feed.test.js.
+Alterados: src/routes/integrations.js, src/integrations/worker.js, src/integrations/shopee/feed-importer.js e src/index.js.
+Novo módulo: src/integrations/shopee/bulk-importer.js.
+Testes: test/shopee-feed.test.js e test/shopee-bulk-import.test.js.
 Não há alteração de dependências ou esquema. Usa as tabelas da migração já existente.
+
+## Importação em massa
+
+A rota `POST /api/integrations/shopee/import-jobs` recebe até 30 mil produtos por job. Ela retorna HTTP 202 com um `job.id`. O worker de integrações processa os itens em lotes de até 20, gera os links de afiliado ausentes via Shopee Affiliate Open API com concorrência controlada e grava cada lote em transação.
+
+Consulte o progresso em `GET /api/integrations/jobs/{id}`. Os estados dos itens distinguem importados, atualizados e erros. Um item que falhar não desfaz os lotes anteriores que já foram confirmados.
+
+Para processamento automático, mantenha um processo Railway executando `npm run worker:integrations` além do serviço web. Configure `SHOPEE_AFFILIATE_APP_ID`, `SHOPEE_AFFILIATE_SECRET` e, opcionalmente, `SHOPEE_LINK_CONCURRENCY` de 1 a 10 (padrão 5).
+
+O payload da fila deve conter os campos necessários do feed: `itemid`, `title`, `price`/`sale_price`, `image_link` e `product_link`. `affiliateUrl` é opcional na fila.
 
 ## Publicar e testar
 
