@@ -74,17 +74,12 @@ async function resolveOne(item) {
   const shopId = match[1];
   const endpoints = [
     {
-      url: `https://shopee.com.br/api/v4/pdp/get?shop_id=${shopId}&item_id=${id}`,
+      url: `https://shopee.com.br/api/v4/item/get?itemid=${id}&shopid=${shopId}`,
       options: { method: "GET", referer: productUrl }
     },
     {
-      url: "https://shopee.com.br/api/v4/cart/cart_panel/get_rw",
-      options: {
-        method: "POST",
-        referer: productUrl,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ item_id: Number(id), shop_id: Number(shopId) })
-      }
+      url: `https://shopee.com.br/api/v4/pdp/get?shop_id=${shopId}&item_id=${id}`,
+      options: { method: "GET", referer: productUrl }
     }
   ];
 
@@ -92,9 +87,13 @@ async function resolveOne(item) {
   for (const endpoint of endpoints) {
     try {
       const payload = await requestJson(endpoint.url, endpoint.options);
-      const returnedItem = payload?.data?.item;
-      const returnedId = returnedItem?.item_id == null ? null : String(returnedItem.item_id);
-      const returnedShop = returnedItem?.shop_id == null ? null : String(returnedItem.shop_id);
+      const returnedItem = payload?.data?.item ?? payload?.data;
+      const returnedId = returnedItem?.item_id == null && returnedItem?.itemid == null
+        ? null
+        : String(returnedItem.item_id ?? returnedItem.itemid);
+      const returnedShop = returnedItem?.shop_id == null && returnedItem?.shopid == null
+        ? null
+        : String(returnedItem.shop_id ?? returnedItem.shopid);
       if (returnedId && returnedId !== id) continue;
       if (returnedShop && returnedShop !== shopId) continue;
 
