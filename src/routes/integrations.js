@@ -581,43 +581,35 @@ router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req,
 // Retorna somente dados públicos do anúncio; não grava nem altera catálogo.
 router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   res.set("Cache-Control", "no-store");
-  const itemId = "MLB4714562299";
   try {
     const token = await getMercadoLivreAccessToken();
-    const response = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+    const response = await fetch("https://api.mercadolibre.com/users/me", {
       headers: {
         accept: "application/json",
-        "user-agent": "ComercioPopular/1.0",
         authorization: `Bearer ${token}`
       },
       signal: AbortSignal.timeout(20000)
     });
     const text = await response.text();
-    let data;
-    try { data = JSON.parse(text); } catch {
-      return res.status(502).json({ teste: "consulta Mercado Livre", httpStatus: response.status, formatoValido: false });
-    }
+    let data = {};
+    try { data = JSON.parse(text); } catch {}
+
     return res.status(200).json({
-      teste: "consulta Mercado Livre",
-      itemId,
+      teste: "validacao do token Mercado Livre",
+      recurso: "/users/me",
       httpStatus: response.status,
       ok: response.ok,
-      produto: response.ok ? {
-        id: data.id,
-        title: data.title,
-        price: data.price,
-        currencyId: data.currency_id,
-        status: data.status,
-        imageUrl: data.pictures?.[0]?.secure_url || data.secure_thumbnail || data.thumbnail,
-        permalink: data.permalink
-      } : null,
-      erro: response.ok ? null : { error: data.error, message: data.message }
+      erro: response.ok ? null : {
+        error: data.error,
+        message: data.message,
+        cause: data.cause
+      }
     });
   } catch (error) {
     return res.status(500).json({
-      teste: "consulta Mercado Livre",
+      teste: "validacao do token Mercado Livre",
       ok: false,
-      erro: error instanceof Error ? error.message : "Falha na consulta."
+      erro: error instanceof Error ? error.message : "Falha na validação."
     });
   }
 });
