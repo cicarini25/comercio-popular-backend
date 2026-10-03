@@ -577,6 +577,51 @@ router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req,
   }
 });
 
+// Diagnóstico público temporário: consulta um anúncio público usando o token OAuth salvo.
+// Retorna somente dados públicos do anúncio; não grava nem altera catálogo.
+router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  const itemId = "MLB4714562299";
+  try {
+    const token = await getMercadoLivreAccessToken();
+    const response = await fetch(`https://api.mercadolibre.com/items/${itemId}`, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "ComercioPopular/1.0",
+        authorization: `Bearer ${token}`
+      },
+      signal: AbortSignal.timeout(20000)
+    });
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+      return res.status(502).json({ teste: "consulta Mercado Livre", httpStatus: response.status, formatoValido: false });
+    }
+    return res.status(200).json({
+      teste: "consulta Mercado Livre",
+      itemId,
+      httpStatus: response.status,
+      ok: response.ok,
+      produto: response.ok ? {
+        id: data.id,
+        title: data.title,
+        price: data.price,
+        currencyId: data.currency_id,
+        status: data.status,
+        imageUrl: data.pictures?.[0]?.secure_url || data.secure_thumbnail || data.thumbnail,
+        permalink: data.permalink
+      } : null,
+      erro: response.ok ? null : { error: data.error, message: data.message }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      teste: "consulta Mercado Livre",
+      ok: false,
+      erro: error instanceof Error ? error.message : "Falha na consulta."
+    });
+  }
+});
+
 // Diagnóstico individual protegido: não grava produtos nem links.
 router.get("/mercadolivre/teste-item", requireIntegrationAdmin, async (_req, res) => {
   res.set("Cache-Control", "no-store");
