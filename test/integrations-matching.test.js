@@ -113,7 +113,21 @@ test("Mercado Livre quebra lotes em no máximo 20 IDs", async () => {
 
   global.fetch = async (url) => {
     requestedUrls.push(String(url));
-    return new Response("[]", { status: 200 });
+    const ids = new URL(String(url)).searchParams.get("ids").split(",");
+    const payload = ids.map((id) => ({
+      code: 200,
+      body: {
+        id,
+        title: "Produto de teste",
+        price: 10,
+        currency_id: "BRL",
+        permalink: "https://mercadolivre.test/" + id
+      }
+    }));
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
   };
 
   try {
