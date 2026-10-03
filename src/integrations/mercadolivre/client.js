@@ -36,8 +36,19 @@ export class MercadoLivreConnector extends MarketplaceConnector {
         headers.authorization = `Bearer ${this.accessToken}`;
       }
 
-      const response = await fetch(url, { headers });
-      const text = await response.text();
+      let response = await fetch(url, { headers });
+      let text = await response.text();
+
+      // /items/bulk é um recurso de consulta de item. Caso o token OAuth
+      // não tenha escopo para essa consulta, tenta novamente sem Bearer.
+      if ((response.status === 401 || response.status === 403) && this.accessToken) {
+        const publicHeaders = {
+          accept: "application/json",
+          "user-agent": "ComercioPopular/1.0"
+        };
+        response = await fetch(url, { headers: publicHeaders });
+        text = await response.text();
+      }
 
       if (!response.ok) {
         throw new Error(
