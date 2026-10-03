@@ -612,43 +612,114 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const token = await getMercadoLivreAccessToken();
-    const response = await fetch("https://api.mercadolibre.com/users/me", {
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${token}`
-      },
+
+    const meResponse = await fetch("https://api.mercadolibre.com/users/me", {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(20000)
     });
-    const text = await response.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch {}
+    const meText = await meResponse.text();
+    let me = {};
+    try { me = JSON.parse(meText); } catch {}
 
-    return res.status(200).json({
-      teste: "validacao do token Mercado Livre",
-      recurso: "/users/me",
-      httpStatus: response.status,
-      ok: response.ok,
-      ...(response.ok
-        ? {
-            conta: {
-              userId: data.id ?? null,
-              nickname: data.nickname ?? null,
-              siteId: data.site_id ?? null
-            }
-          }
-        : {
-            erro: {
-              error: data.error,
-              message: data.message,
-              cause: data.cause
-            }
-          })
+    if (!meResponse.ok || !me?.id) {
+      return res.status(200).json({
+        teste: "Mercado Livre",
+        etapa: "autenticacao",
+        httpStatus: meResponse.status,
+        ok: false,
+        erro: me.error || "Token inválido"
+      });
+    }
+
+    const searchUrl = new URL(`https://api.mercadolibre.com/users/${me.id}/items/search`);
+    searchUrl.searchParams.set("limit", "5");
+
+    const searchResponse = await fetch(searchUrl, {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20000)
+    });
+    const searchText = await searchResponse.text();
+    let searchData = {};
+    try { searchData = JSON.parse(searchText); } catch {}
+
+    if (!searchResponse.ok) {
+      return res.status(200).json({
+        teste: "Mercado Livre",
+        etapa: "busca de anúncios da conta conectada",
+        httpStatus: searchResponse.status,
+        ok: false,
+        erro: searchData.error || "A API recusou a busca de anúncios."
+      });
+    }
+
+    const ids = Array.isArray(searchData.results) ? searchData.results.map(String).slice(0, 5) : [];
+
+    if (!ids.length) {
+      return res.status(200).json({
+        teste: "Mercado Livre",
+        etapa: "busca de anúncios da conta conectada",
+        httpStatus: searchResponse.status,
+        ok: true,
+        totalAnuncios: searchData.paging?.total ?? 0,
+        ids: [],
+        imagens: { encontrados: 0, comImagem: 0, semImagem: 0 }
+      });
+    }
+
+    const bulkUrl = new URL("https://api.mercadolibre.com/items/bulk");
+    bulkUrl.searchParams.set("ids", ids.join(","));
+    const bulkResponse = await fetch(bulkUrl, {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20000)
+    });
+    const bulkText = await bulkResponse.text();
+    let bulkData = [];
+    try { bulkData = JSON.parse(bulkText); } catch { bulkData = []; }
+
+    if (!bulkResponse.ok) {
+      return res.status(200).json({
+        teste: "Mercado Livre",
+        etapa: "consulta de produtos em lote",
+        httpStatus: bulkResponse.status,
+        ok: false,
+        erro: "A API recusou a consulta em lote."
+      });
+    }
+
+    const produtos = Array.isArray(bulkData) ? bulkData.map((entry) => {
+      const body = entry?.body;
+      return {
+        id: entry?.id ?? body?.id ?? null,
+        statusCode: entry?.status_code ?? entry?.code ?? null,
+        titulo: body?.title ?? null,
+        preco: body?.price ?? null,
+        imagem: Boolean(
+          body?.pictures?.[0]?.secure_url ||
+          body?.secure_thumbnail ||
+          body?.thumbnail
+        )
+      };
+    }) : [];
+
+    return res.json({
+      teste: "Mercado Livre",
+      etapa: "consulta de produtos em lote",
+      httpStatus: bulkResponse.status,
+      ok: true,
+      totalAnuncios: searchData.paging?.total ?? null,
+      ids,
+      imagens: {
+        encontrados: produtos.length,
+        comImagem: produtos.filter((p) => p.imagem).length,
+        semImagem: produtos.filter((p) => !p.imagem).length
+      },
+      produtos
     });
   } catch (error) {
     return res.status(500).json({
-      teste: "validacao do token Mercado Livre",
+      teste: "Mercado Livre",
       ok: false,
-      erro: error instanceof Error ? error.message : "Falha na validação."
+      erro: error instanceof Error ? error.message : "Falha no teste."
     });
   }
 });
