@@ -14,7 +14,7 @@ export function normalizeShopeeBulkItems(items, { requireAffiliateLink = true } 
 
   const seen = new Set();
   return items.map((row) => {
-    const product = normalizeFeedItem(row, { requireAffiliateLink });
+    const product = normalizeFeedItem(row, { requireAffiliateLink, allowMissingImage: row.allowMissingImage === true });
     if (seen.has(product.id)) {
       throw new Error(`ID duplicado: ${product.id}.`);
     }
