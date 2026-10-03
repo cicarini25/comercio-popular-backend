@@ -4,6 +4,7 @@ import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
 import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
+import { resolveShopeeImages } from "../integrations/shopee/image-resolver.js";
 import {
   buildMercadoLivreAuthorizationUrl,
   createMercadoLivreOAuthState,
@@ -66,6 +67,25 @@ router.post("/shopee/import-feed", requireIntegrationAdmin, async (req, res) => 
   } catch (error) {
     console.error("Falha na importação do feed Shopee:", error.message);
     res.status(400).json({ error: "Importação cancelada. Confira os campos e os logs do servidor; nenhuma alteração foi confirmada." });
+  }
+});
+
+// POST /api/integrations/shopee/resolve-images
+// Recupera imagens diretamente do PDP Shopee por shop_id + item_id.
+// Não grava catálogo; retorna somente URLs de imagem para a prévia/importação.
+router.post("/shopee/resolve-images", requireIntegrationAdmin, async (req, res) => {
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Envie 'items' com Item IDs e Product Links Shopee." });
+  if (items.length > 100) return res.status(400).json({ error: "A resolução aceita até 100 produtos por chamada." });
+
+  try {
+    const result = await resolveShopeeImages(items);
+    return res.json({ ok: true, marketplace: "shopee", ...result });
+  } catch (error) {
+    console.error("Erro ao resolver imagens Shopee:", error);
+    return res.status(400).json({
+      error: error instanceof Error ? error.message : "Falha ao recuperar imagens Shopee."
+    });
   }
 });
 
