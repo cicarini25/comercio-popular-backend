@@ -542,44 +542,72 @@ router.get("/mercadolivre/diagnostico", requireIntegrationAdmin, async (_req, re
 router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req, res) => {
   try {
     const token = await getMercadoLivreAccessToken();
-    const url = new URL("https://api.mercadolibre.com/sites/MLB/search");
-    url.searchParams.set("seller_id", "3230452442");
+
+    const meResponse = await fetch("https://api.mercadolibre.com/users/me", {
+      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(20000)
+    });
+    const meText = await meResponse.text();
+    let me = {};
+    try { me = JSON.parse(meText); } catch {}
+
+    if (!meResponse.ok || !me?.id) {
+      return res.status(200).json({
+        teste: "busca por vendedor autenticado",
+        etapa: "/users/me",
+        httpStatus: meResponse.status,
+        ok: false,
+        error: me.error,
+        message: me.message,
+        cause: me.cause
+      });
+    }
+
+    const url = new URL(`https://api.mercadolibre.com/users/${me.id}/items/search`);
     url.searchParams.set("limit", "5");
+
     const response = await fetch(url, {
       headers: { accept: "application/json", authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(20000)
     });
+
     const raw = await response.text();
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      return res.json({ teste: "busca por vendedor", httpStatus: response.status,
-        error: "Resposta sem JSON válido", detalhe: raw.slice(0, 500) });
+    let data = {};
+    try { data = JSON.parse(raw); } catch {}
+
+    if (!response.ok) {
+      return res.status(200).json({
+        teste: "busca por vendedor autenticado",
+        conta: { userId: me.id, nickname: me.nickname, siteId: me.site_id },
+        etapa: `/users/${me.id}/items/search`,
+        httpStatus: response.status,
+        ok: false,
+        error: data.error,
+        message: data.message,
+        cause: data.cause
+      });
     }
+
     return res.json({
-      teste: "busca por vendedor",
-      sellerId: "3230452442",
+      teste: "busca por vendedor autenticado",
+      conta: { userId: me.id, nickname: me.nickname, siteId: me.site_id },
+      etapa: `/users/${me.id}/items/search`,
       httpStatus: response.status,
-      ...(response.ok ? {
-        total: data.paging?.total ?? null,
-        produtos: Array.isArray(data.results) ? data.results.map(item => ({
-          id: item.id, title: item.title, price: item.price,
-          thumbnail: item.thumbnail, permalink: item.permalink
-        })) : [],
-        formatoValido: Array.isArray(data.results)
-      } : { error: data.error, message: data.message, cause: data.cause })
+      ok: true,
+      total: data.paging?.total ?? null,
+      produtos: Array.isArray(data.results) ? data.results.slice(0, 5) : [],
+      formatoValido: Array.isArray(data.results)
     });
   } catch (error) {
     return res.status(500).json({
+      teste: "busca por vendedor autenticado",
+      ok: false,
       error: error instanceof Error ? error.message : "Falha no teste do vendedor."
     });
   }
 });
 
-// Diagnóstico público temporário: consulta um anúncio público usando o token OAuth salvo.
-// Retorna somente dados públicos do anúncio; não grava nem altera catálogo.
-router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
+// Diagnóstico público temporário: consulta um anúncio público usando o token OAuth salvo., async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const token = await getMercadoLivreAccessToken();
