@@ -712,6 +712,67 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   }
 });
 
+// Diagnóstico temporário da aplicação Mercado Livre.
+// Retorna somente estado/configuração não-secreta da aplicação.
+router.get("/mercadolivre/teste-aplicacao", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const token = await getMercadoLivreAccessToken();
+    const appId = process.env.MELI_APP_ID?.trim();
+
+    if (!appId) {
+      return res.status(500).json({
+        teste: "detalhes da aplicação Mercado Livre",
+        ok: false,
+        erro: "MELI_APP_ID não configurado."
+      });
+    }
+
+    const response = await fetch(`https://api.mercadolibre.com/applications/${appId}`, {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${token}`
+      },
+      signal: AbortSignal.timeout(20000)
+    });
+
+    const raw = await response.text();
+    let data = {};
+    try { data = JSON.parse(raw); } catch {}
+
+    return res.status(200).json({
+      teste: "detalhes da aplicação Mercado Livre",
+      httpStatus: response.status,
+      ok: response.ok,
+      ...(response.ok
+        ? {
+            aplicacao: {
+              id: data.id ?? null,
+              siteId: data.site_id ?? null,
+              ativa: data.active ?? null,
+              sandbox: data.sandbox_mode ?? null,
+              certificacao: data.certification_status ?? null,
+              maxRequestsPorHora: data.max_requests_per_hour ?? null,
+              scopes: data.scopes ?? data.scope ?? null
+            }
+          }
+        : {
+            erro: {
+              error: data.error,
+              message: data.message,
+              cause: data.cause
+            }
+          })
+    });
+  } catch (error) {
+    return res.status(500).json({
+      teste: "detalhes da aplicação Mercado Livre",
+      ok: false,
+      erro: error instanceof Error ? error.message : "Falha ao consultar a aplicação."
+    });
+  }
+});
+
 // Diagnóstico individual protegido: não grava produtos nem links.
 router.get("/mercadolivre/teste-item", requireIntegrationAdmin, async (_req, res) => {
   res.set("Cache-Control", "no-store");
