@@ -40,10 +40,7 @@ async function requestJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     headers: {
-      accept: "application/json, text/plain, */*",
-      "accept-language": "pt-BR,pt;q=0.9,en;q=0.8",
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/154 Safari/537.36",
-      referer: options.referer || "https://shopee.com.br/",
+      accept: "application/json",
       ...(options.headers || {})
     },
     signal: AbortSignal.timeout(15000)
@@ -75,11 +72,18 @@ async function resolveOne(item) {
   const endpoints = [
     {
       url: `https://shopee.com.br/api/v4/item/get?itemid=${id}&shopid=${shopId}`,
-      options: { method: "GET", referer: productUrl }
+      options: { method: "GET" }
     },
     {
       url: `https://shopee.com.br/api/v4/pdp/get?shop_id=${shopId}&item_id=${id}`,
-      options: { method: "GET", referer: productUrl }
+      options: { method: "GET" }
+    },
+    {
+      url: `https://shopee.com.br/api/v4/pdp/get_pc?shop_id=${shopId}&item_id=${id}`,
+      options: {
+        method: "GET",
+        headers: { "x-api-source": "pc" }
+      }
     }
   ];
 
@@ -99,6 +103,25 @@ async function resolveOne(item) {
 
       const image = extractShopeeImageUrl(payload);
       if (image) return { itemId: id, imageUrl: image, source: endpoint.url };
+
+      const directCandidates = [
+        payload?.data?.image,
+        payload?.data?.image_url,
+        payload?.data?.imageUrl,
+        payload?.data?.item?.image,
+        payload?.data?.item?.image_url,
+        payload?.data?.item?.imageUrl
+      ];
+      for (const candidate of directCandidates) {
+        const image = imageUrlFromKey(candidate);
+        if (!image) continue;
+        try {
+          const parsed = new URL(image);
+          if (parsed.protocol === "https:") {
+            return { itemId: id, imageUrl: parsed.href, source: endpoint.url };
+          }
+        } catch {}
+      }
       lastError = new Error("Endpoint Shopee não retornou imagem.");
     } catch (error) {
       lastError = error;
