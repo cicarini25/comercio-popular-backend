@@ -62,7 +62,7 @@ test('gera links ausentes em paralelo controlado e preserva os já existentes', 
       itemid: '25846308994',
       product_link: 'https://shopee.com.br/product/858929102/25846308994'
     }
-  ]);
+  ], { requireAffiliateLink: false });
 
   const result = await generateMissingShopeeAffiliateLinks(products, connector, { concurrency: 2 });
   assert.equal(calls, 2);
