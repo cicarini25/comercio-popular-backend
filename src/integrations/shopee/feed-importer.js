@@ -11,7 +11,7 @@ export function affiliateLink(value) {
   return url.href;
 }
 
-export function normalizeFeedItem(row, { requireAffiliateLink = true, allowMissingImage = false } = {}) {
+export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
   if (!row || typeof row !== 'object') throw new Error('Produto inválido.');
   const id = String(row.itemid ?? row.itemId ?? '');
   if (!/^\d+$/.test(id)) throw new Error('ID ausente ou inválido.');
@@ -45,17 +45,13 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true, allowMissi
   }
 
   const imageRaw = row.image_link ?? row.imageUrl;
-  let image = null;
-  if (imageRaw && String(imageRaw).trim()) {
-    try {
-      image = new URL(String(imageRaw).trim());
-    } catch {
-      throw new Error(`Item ${id}: imagem inválida.`);
-    }
-    if (image.protocol !== 'https:' || image.username || image.password) {
-      throw new Error(`Item ${id}: imagem inválida.`);
-    }
-  } else if (!allowMissingImage) {
+  let image;
+  try {
+    image = new URL(String(imageRaw ?? '').trim());
+  } catch {
+    throw new Error(`Item ${id}: imagem inválida.`);
+  }
+  if (image.protocol !== 'https:' || image.username || image.password) {
     throw new Error(`Item ${id}: imagem inválida.`);
   }
 
@@ -79,7 +75,7 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true, allowMissi
     description: String(row.description ?? '').slice(0, 50000),
     category: String(row.category || row.global_category1 || 'Shopee').slice(0, 100),
     seller: String(row.shop_name ?? row.shopName ?? '').slice(0, 180),
-    image: image ? image.href : null,
+    image: image.href,
     productUrl: product.href,
     affiliateUrl,
     shopId: match[1]
