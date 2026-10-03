@@ -79,10 +79,9 @@ async function resolveOne(item) {
       options: { method: "GET" }
     },
     {
-      url: `https://shopee.com.br/api/v4/pdp/get_pc?shop_id=${shopId}&item_id=${id}`,
+      url: `https://shopee.com.br/api/v4/pdp/get_pc?shop_id=${shopId}&item_id=${id}&productDetail_mode=FROM_CACHE_AND_CORRECTED`,
       options: {
-        method: "GET",
-        headers: { "x-api-source": "pc" }
+        method: "GET"
       }
     }
   ];
