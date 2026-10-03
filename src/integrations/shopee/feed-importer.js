@@ -11,7 +11,7 @@ export function affiliateLink(value) {
   return url.href;
 }
 
-export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
+export function normalizeFeedItem(row, { requireAffiliateLink = true, allowMissingImage = false } = {}) {
   if (!row || typeof row !== 'object') throw new Error('Produto inválido.');
   const id = String(row.itemid ?? row.itemId ?? '');
   if (!/^\d+$/.test(id)) throw new Error('ID ausente ou inválido.');
@@ -45,13 +45,17 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
   }
 
   const imageRaw = row.image_link ?? row.imageUrl;
-  let image;
-  try {
-    image = new URL(imageRaw);
-  } catch {
-    throw new Error(`Item ${id}: imagem inválida.`);
-  }
-  if (image.protocol !== 'https:' || image.username || image.password) {
+  let image = null;
+  if (imageRaw && String(imageRaw).trim()) {
+    try {
+      image = new URL(String(imageRaw).trim());
+    } catch {
+      throw new Error(`Item ${id}: imagem inválida.`);
+    }
+    if (image.protocol !== 'https:' || image.username || image.password) {
+      throw new Error(`Item ${id}: imagem inválida.`);
+    }
+  } else if (!allowMissingImage) {
     throw new Error(`Item ${id}: imagem inválida.`);
   }
 
@@ -75,7 +79,7 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
     description: String(row.description ?? '').slice(0, 50000),
     category: String(row.category || row.global_category1 || 'Shopee').slice(0, 100),
     seller: String(row.shop_name ?? row.shopName ?? '').slice(0, 180),
-    image: image.href,
+    image: image ? image.href : null,
     productUrl: product.href,
     affiliateUrl,
     shopId: match[1]
@@ -119,7 +123,7 @@ export async function upsertShopeeProducts(products, db = pool) {
       const metadata = JSON.stringify({ importedFrom: 'shopee-feed', shopId: p.shopId, availabilityKnown: false });
 
       if (productId) {
-        await client.query(`UPDATE products SET title=$1, description=$2, price=$3, image_url=$4,
+        await client.query(`UPDATE products SET title=$1, description=$2, price=$3, image_url=COALESCE($4,image_url),
           category=$5, affiliate_link=$6, metadata=COALESCE(metadata,'{}'::jsonb)||$7::jsonb,
           updated_at=now() WHERE id=$8 AND source='shopee'`,
         [p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,metadata,productId]);
