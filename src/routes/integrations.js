@@ -613,54 +613,47 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   try {
     const token = await getMercadoLivreAccessToken();
 
-    const meResponse = await fetch("https://api.mercadolibre.com/users/me", {
-      headers: { accept: "application/json", authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(20000)
-    });
-    const meText = await meResponse.text();
-    let me = {};
-    try { me = JSON.parse(meText); } catch {}
-
-    if (!meResponse.ok || !me?.id) {
-      return res.status(200).json({
-        teste: "Mercado Livre",
-        etapa: "autenticacao",
-        httpStatus: meResponse.status,
-        ok: false,
-        erro: me.error || "Token inválido"
-      });
-    }
-
-    const searchUrl = new URL(`https://api.mercadolibre.com/users/${me.id}/items/search`);
+    const searchUrl = new URL("https://api.mercadolibre.com/sites/MLB/search");
+    searchUrl.searchParams.set("q", "smart tv");
     searchUrl.searchParams.set("limit", "5");
 
     const searchResponse = await fetch(searchUrl, {
-      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${token}`
+      },
       signal: AbortSignal.timeout(20000)
     });
+
     const searchText = await searchResponse.text();
     let searchData = {};
     try { searchData = JSON.parse(searchText); } catch {}
 
     if (!searchResponse.ok) {
       return res.status(200).json({
-        teste: "Mercado Livre",
-        etapa: "busca de anúncios da conta conectada",
+        teste: "consulta catálogo público Mercado Livre",
+        etapa: "busca pública",
         httpStatus: searchResponse.status,
         ok: false,
-        erro: searchData.error || "A API recusou a busca de anúncios."
+        erro: {
+          error: searchData.error,
+          message: searchData.message,
+          cause: searchData.cause
+        }
       });
     }
 
-    const ids = Array.isArray(searchData.results) ? searchData.results.map(String).slice(0, 5) : [];
+    const ids = Array.isArray(searchData.results)
+      ? searchData.results.map(String).filter(Boolean).slice(0, 5)
+      : [];
 
     if (!ids.length) {
-      return res.status(200).json({
-        teste: "Mercado Livre",
-        etapa: "busca de anúncios da conta conectada",
+      return res.json({
+        teste: "consulta catálogo público Mercado Livre",
+        etapa: "busca pública",
         httpStatus: searchResponse.status,
         ok: true,
-        totalAnuncios: searchData.paging?.total ?? 0,
+        totalResultados: searchData.paging?.total ?? 0,
         ids: [],
         imagens: { encontrados: 0, comImagem: 0, semImagem: 0 }
       });
@@ -668,56 +661,70 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
 
     const bulkUrl = new URL("https://api.mercadolibre.com/items/bulk");
     bulkUrl.searchParams.set("ids", ids.join(","));
+
     const bulkResponse = await fetch(bulkUrl, {
-      headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${token}`
+      },
       signal: AbortSignal.timeout(20000)
     });
+
     const bulkText = await bulkResponse.text();
     let bulkData = [];
-    try { bulkData = JSON.parse(bulkText); } catch { bulkData = []; }
+    try { bulkData = JSON.parse(bulkText); } catch {}
 
     if (!bulkResponse.ok) {
       return res.status(200).json({
-        teste: "Mercado Livre",
-        etapa: "consulta de produtos em lote",
+        teste: "consulta catálogo público Mercado Livre",
+        etapa: "consulta em lote",
         httpStatus: bulkResponse.status,
         ok: false,
-        erro: "A API recusou a consulta em lote."
+        erro: {
+          error: bulkData?.error,
+          message: bulkData?.message,
+          cause: bulkData?.cause
+        }
       });
     }
 
-    const produtos = Array.isArray(bulkData) ? bulkData.map((entry) => {
-      const body = entry?.body;
-      return {
-        id: entry?.id ?? body?.id ?? null,
-        statusCode: entry?.status_code ?? entry?.code ?? null,
-        titulo: body?.title ?? null,
-        preco: body?.price ?? null,
-        imagem: Boolean(
-          body?.pictures?.[0]?.secure_url ||
-          body?.secure_thumbnail ||
-          body?.thumbnail
-        )
-      };
-    }) : [];
+    const produtos = Array.isArray(bulkData)
+      ? bulkData.map((entry) => {
+          const body = entry?.body;
+          const imagem =
+            body?.pictures?.[0]?.secure_url ||
+            body?.pictures?.[0]?.url ||
+            body?.secure_thumbnail ||
+            body?.thumbnail ||
+            null;
+
+          return {
+            id: entry?.id ?? body?.id ?? null,
+            statusCode: entry?.status_code ?? entry?.code ?? null,
+            titulo: body?.title ?? null,
+            preco: body?.price ?? null,
+            imagem
+          };
+        })
+      : [];
 
     return res.json({
-      teste: "Mercado Livre",
-      etapa: "consulta de produtos em lote",
+      teste: "consulta catálogo público Mercado Livre",
+      etapa: "consulta em lote",
       httpStatus: bulkResponse.status,
       ok: true,
-      totalAnuncios: searchData.paging?.total ?? null,
+      totalResultados: searchData.paging?.total ?? null,
       ids,
       imagens: {
         encontrados: produtos.length,
-        comImagem: produtos.filter((p) => p.imagem).length,
+        comImagem: produtos.filter((p) => Boolean(p.imagem)).length,
         semImagem: produtos.filter((p) => !p.imagem).length
       },
       produtos
     });
   } catch (error) {
     return res.status(500).json({
-      teste: "Mercado Livre",
+      teste: "consulta catálogo público Mercado Livre",
       ok: false,
       erro: error instanceof Error ? error.message : "Falha no teste."
     });
