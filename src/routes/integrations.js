@@ -599,11 +599,21 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
       recurso: "/users/me",
       httpStatus: response.status,
       ok: response.ok,
-      erro: response.ok ? null : {
-        error: data.error,
-        message: data.message,
-        cause: data.cause
-      }
+      ...(response.ok
+        ? {
+            conta: {
+              userId: data.id ?? null,
+              nickname: data.nickname ?? null,
+              siteId: data.site_id ?? null
+            }
+          }
+        : {
+            erro: {
+              error: data.error,
+              message: data.message,
+              cause: data.cause
+            }
+          })
     });
   } catch (error) {
     return res.status(500).json({
