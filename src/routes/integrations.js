@@ -611,8 +611,6 @@ router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req,
 router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
-    const token = await getMercadoLivreAccessToken();
-
     const searchUrl = new URL("https://api.mercadolibre.com/sites/MLB/search");
     searchUrl.searchParams.set("q", "smart tv");
     searchUrl.searchParams.set("limit", "5");
@@ -620,7 +618,7 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     const searchResponse = await fetch(searchUrl, {
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${token}`
+        "user-agent": "ComercioPopular/1.0"
       },
       signal: AbortSignal.timeout(20000)
     });
@@ -632,7 +630,7 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     if (!searchResponse.ok) {
       return res.status(200).json({
         teste: "consulta catálogo público Mercado Livre",
-        etapa: "busca pública",
+        etapa: "busca pública sem token",
         httpStatus: searchResponse.status,
         ok: false,
         erro: {
@@ -650,7 +648,7 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     if (!ids.length) {
       return res.json({
         teste: "consulta catálogo público Mercado Livre",
-        etapa: "busca pública",
+        etapa: "busca pública sem token",
         httpStatus: searchResponse.status,
         ok: true,
         totalResultados: searchData.paging?.total ?? 0,
@@ -665,7 +663,7 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     const bulkResponse = await fetch(bulkUrl, {
       headers: {
         accept: "application/json",
-        authorization: `Bearer ${token}`
+        "user-agent": "ComercioPopular/1.0"
       },
       signal: AbortSignal.timeout(20000)
     });
@@ -677,7 +675,7 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     if (!bulkResponse.ok) {
       return res.status(200).json({
         teste: "consulta catálogo público Mercado Livre",
-        etapa: "consulta em lote",
+        etapa: "consulta em lote sem token",
         httpStatus: bulkResponse.status,
         ok: false,
         erro: {
@@ -697,27 +695,26 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
             body?.secure_thumbnail ||
             body?.thumbnail ||
             null;
-
           return {
             id: entry?.id ?? body?.id ?? null,
             statusCode: entry?.status_code ?? entry?.code ?? null,
             titulo: body?.title ?? null,
             preco: body?.price ?? null,
-            imagem
+            imagem: imagem ? "presente" : null
           };
         })
       : [];
 
     return res.json({
       teste: "consulta catálogo público Mercado Livre",
-      etapa: "consulta em lote",
+      etapa: "consulta em lote sem token",
       httpStatus: bulkResponse.status,
       ok: true,
       totalResultados: searchData.paging?.total ?? null,
       ids,
       imagens: {
         encontrados: produtos.length,
-        comImagem: produtos.filter((p) => Boolean(p.imagem)).length,
+        comImagem: produtos.filter((p) => p.imagem).length,
         semImagem: produtos.filter((p) => !p.imagem).length
       },
       produtos
