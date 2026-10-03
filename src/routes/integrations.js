@@ -611,6 +611,8 @@ router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req,
 router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
+    const token = await getMercadoLivreAccessToken();
+
     const searchUrl = new URL("https://api.mercadolibre.com/sites/MLB/search");
     searchUrl.searchParams.set("q", "smart tv");
     searchUrl.searchParams.set("limit", "5");
@@ -618,7 +620,7 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     const searchResponse = await fetch(searchUrl, {
       headers: {
         accept: "application/json",
-        "user-agent": "ComercioPopular/1.0"
+        authorization: `Bearer ${token}`
       },
       signal: AbortSignal.timeout(20000)
     });
@@ -630,14 +632,10 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
     if (!searchResponse.ok) {
       return res.status(200).json({
         teste: "consulta catálogo público Mercado Livre",
-        etapa: "busca pública sem token",
+        etapa: "busca pública",
         httpStatus: searchResponse.status,
         ok: false,
-        erro: {
-          error: searchData.error,
-          message: searchData.message,
-          cause: searchData.cause
-        }
+        erro: searchData.message || searchData.error || "A API recusou a busca."
       });
     }
 
@@ -645,70 +643,56 @@ router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
       ? searchData.results.map(String).filter(Boolean).slice(0, 5)
       : [];
 
-    if (!ids.length) {
-      return res.json({
-        teste: "consulta catálogo público Mercado Livre",
-        etapa: "busca pública sem token",
-        httpStatus: searchResponse.status,
-        ok: true,
-        totalResultados: searchData.paging?.total ?? 0,
-        ids: [],
-        imagens: { encontrados: 0, comImagem: 0, semImagem: 0 }
-      });
-    }
-
     const bulkUrl = new URL("https://api.mercadolibre.com/items/bulk");
-    bulkUrl.searchParams.set("ids", ids.join(","));
+    if (ids.length) bulkUrl.searchParams.set("ids", ids.join(","));
 
-    const bulkResponse = await fetch(bulkUrl, {
-      headers: {
-        accept: "application/json",
-        "user-agent": "ComercioPopular/1.0"
-      },
-      signal: AbortSignal.timeout(20000)
-    });
+    const bulkResponse = ids.length
+      ? await fetch(bulkUrl, {
+          headers: {
+            accept: "application/json",
+            authorization: `Bearer ${token}`
+          },
+          signal: AbortSignal.timeout(20000)
+        })
+      : null;
 
-    const bulkText = await bulkResponse.text();
+    const bulkText = bulkResponse ? await bulkResponse.text() : "";
     let bulkData = [];
-    try { bulkData = JSON.parse(bulkText); } catch {}
+    try { bulkData = bulkText ? JSON.parse(bulkText) : []; } catch {}
 
-    if (!bulkResponse.ok) {
+    if (bulkResponse && !bulkResponse.ok) {
       return res.status(200).json({
         teste: "consulta catálogo público Mercado Livre",
-        etapa: "consulta em lote sem token",
+        etapa: "consulta em lote",
         httpStatus: bulkResponse.status,
         ok: false,
-        erro: {
-          error: bulkData?.error,
-          message: bulkData?.message,
-          cause: bulkData?.cause
-        }
+        ids,
+        erro: bulkData?.message || bulkData?.error || "A API recusou a consulta em lote."
       });
     }
 
     const produtos = Array.isArray(bulkData)
       ? bulkData.map((entry) => {
-          const body = entry?.body;
-          const imagem =
-            body?.pictures?.[0]?.secure_url ||
-            body?.pictures?.[0]?.url ||
-            body?.secure_thumbnail ||
-            body?.thumbnail ||
-            null;
+          const body = entry?.body || {};
           return {
-            id: entry?.id ?? body?.id ?? null,
+            id: entry?.id ?? body.id ?? null,
             statusCode: entry?.status_code ?? entry?.code ?? null,
-            titulo: body?.title ?? null,
-            preco: body?.price ?? null,
-            imagem: imagem ? "presente" : null
+            titulo: body.title ?? null,
+            preco: body.price ?? null,
+            imagem: Boolean(
+              body.pictures?.[0]?.secure_url ||
+              body.pictures?.[0]?.url ||
+              body.secure_thumbnail ||
+              body.thumbnail
+            )
           };
         })
       : [];
 
     return res.json({
       teste: "consulta catálogo público Mercado Livre",
-      etapa: "consulta em lote sem token",
-      httpStatus: bulkResponse.status,
+      etapa: "consulta em lote",
+      httpStatus: bulkResponse?.status ?? searchResponse.status,
       ok: true,
       totalResultados: searchData.paging?.total ?? null,
       ids,
