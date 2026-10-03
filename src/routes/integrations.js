@@ -607,7 +607,8 @@ router.get("/mercadolivre/teste-vendedor", requireIntegrationAdmin, async (_req,
   }
 });
 
-// Diagnóstico público temporário: consulta um anúncio público usando o token OAuth salvo., async (_req, res) => {
+// Diagnóstico público temporário: valida somente o token OAuth salvo.
+router.get("/mercadolivre/teste-item-publico", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const token = await getMercadoLivreAccessToken();
