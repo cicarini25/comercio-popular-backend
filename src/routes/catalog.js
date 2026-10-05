@@ -2,6 +2,7 @@ import { affiliateLink } from "../integrations/shopee/feed-importer.js";
 import { sheinAffiliateLink } from "../integrations/shein/feed-importer.js";
 import express from 'express';
 import pool from '../db/pool.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -224,8 +225,8 @@ function validateStoredAffiliateLink(value, platformCode) {
   return validate(value);
 }
 
-// Link de compra (Shopee e SHEIN): usa exclusivamente a oferta ativa armazenada.
-router.get('/offers/:id/go', async (req, res) => {
+// Link de compra (Shopee e SHEIN): exige sessão e usa exclusivamente a oferta ativa armazenada.
+router.get('/offers/:id/go', requireAuth, async (req, res) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
     return res.status(400).json({ error: 'ID de oferta inválido.' });
   }
@@ -238,7 +239,7 @@ router.get('/offers/:id/go', async (req, res) => {
     if (!result.rows[0]?.affiliate_url) return res.status(404).json({ error: 'Oferta indisponível.' });
     const link = validateStoredAffiliateLink(result.rows[0].affiliate_url, result.rows[0].platform_code);
     res.set('Cache-Control', 'no-store');
-    return res.redirect(302, link);
+    return res.json({ redirectUrl: link });
   } catch {
     return res.status(503).json({ error: 'Não foi possível abrir a oferta.' });
   }
