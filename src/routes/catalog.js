@@ -43,7 +43,7 @@ router.get('/products', async (req, res) => {
 
   if (category) {
     values.push(category);
-    where.push(`${CATEGORY_SQL} = ${values.length}`);
+    where.push(`${CATEGORY_SQL} = $${values.length}`);
   }
 
   if (platform) {
