@@ -1,6 +1,6 @@
 # SHEIN — importação de produtos
 
-A SHEIN não oferece feed/API no painel de afiliados, então a importação é assistida: você gera o link no
+Nesta implementação, a importação é assistida: você gera o link no
 **Link do conversor** e envia os dados do produto para o endpoint administrativo.
 
 ## Passo a passo

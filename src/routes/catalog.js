@@ -214,15 +214,14 @@ router.get('/platforms', async (_req, res) => {
 });
 
 // Cada plataforma só libera links do seu próprio domínio de afiliado.
-function validateStoredAffiliateLink(value) {
-  for (const validate of [affiliateLink, sheinAffiliateLink]) {
-    try {
-      return validate(value);
-    } catch {
-      // tenta o próximo validador
-    }
-  }
-  throw new Error('Link de afiliado não permitido.');
+function validateStoredAffiliateLink(value, platformCode) {
+  const validate = platformCode === 'shopee'
+    ? affiliateLink
+    : platformCode === 'shein'
+      ? sheinAffiliateLink
+      : null;
+  if (!validate) throw new Error('Plataforma de afiliado não permitida.');
+  return validate(value);
 }
 
 // Link de compra (Shopee e SHEIN): usa exclusivamente a oferta ativa armazenada.
@@ -231,13 +230,13 @@ router.get('/offers/:id/go', async (req, res) => {
     return res.status(400).json({ error: 'ID de oferta inválido.' });
   }
   try {
-    const result = await pool.query(`SELECT po.affiliate_url FROM product_offers po
+    const result = await pool.query(`SELECT po.affiliate_url, ap.code AS platform_code FROM product_offers po
       JOIN affiliate_platforms ap ON ap.id=po.platform_id
       JOIN products p ON p.id=po.product_id
       WHERE po.id=$1 AND po.is_active=TRUE AND ap.is_active=TRUE
         AND ap.code IN ('shopee','shein') AND p.status='ativo' AND po.offer_type='afiliada'`, [req.params.id]);
     if (!result.rows[0]?.affiliate_url) return res.status(404).json({ error: 'Oferta indisponível.' });
-    const link = validateStoredAffiliateLink(result.rows[0].affiliate_url);
+    const link = validateStoredAffiliateLink(result.rows[0].affiliate_url, result.rows[0].platform_code);
     res.set('Cache-Control', 'no-store');
     return res.redirect(302, link);
   } catch {
