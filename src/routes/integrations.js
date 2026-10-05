@@ -1,4 +1,5 @@
 import { importShopeeFeed } from "../integrations/shopee/feed-importer.js";
+import { importSheinFeed } from "../integrations/shein/feed-importer.js";
 import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
@@ -57,6 +58,17 @@ router.post("/mercadolivre/import", requireIntegrationAdmin, async (req, res) =>
     res.status(400).json({
       error: error instanceof Error ? error.message : "Falha na importação."
     });
+  }
+});
+
+// POST /api/integrations/shein/import-feed
+// Importação validada e transacional da SHEIN. Prévia (dryRun) por padrão.
+router.post("/shein/import-feed", requireIntegrationAdmin, async (req, res) => {
+  try {
+    res.json({ ok: true, marketplace: "shein", ...await importSheinFeed(req.body ?? {}) });
+  } catch (error) {
+    console.error("Falha na importação do feed SHEIN:", error.message);
+    res.status(400).json({ error: "Importação cancelada. Confira os campos e os logs do servidor; nenhuma alteração foi confirmada." });
   }
 });
 

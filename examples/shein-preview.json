@@ -1,0 +1,23 @@
+{
+  "dryRun": true,
+  "items": [
+    {
+      "id": "12345678",
+      "titulo": "Conjunto térmico feminino manga longa",
+      "preco": "49,90",
+      "preco_original": "89,90",
+      "imagem_url": "https://img.ltwebstatic.com/exemplo/conjunto-termico.jpg",
+      "link_afiliado": "https://shein.top/exemplo1",
+      "link_produto": "https://br.shein.com/Conjunto-termico-p-12345678-cat-1234.html",
+      "categoria": "Moda feminina"
+    },
+    {
+      "id": "87654321",
+      "titulo": "Blusa feminina de renda",
+      "preco": "R$ 34,90",
+      "imagem_url": "https://img.ltwebstatic.com/exemplo/blusa-renda.jpg",
+      "link_afiliado": "https://shein.top/exemplo2",
+      "categoria": "Moda feminina"
+    }
+  ]
+}
