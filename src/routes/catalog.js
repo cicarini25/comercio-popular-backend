@@ -8,6 +8,7 @@ const router = express.Router();
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
+const CATEGORY_SQL = "CASE WHEN lower(COALESCE(p.title, '')) ~ '(armário|armario|estante|guarda.?roupa|cômoda|comoda|rack|mesa de jantar|sofá|sofa|cama|colchão|colchao)' THEN 'Móveis' ELSE p.category END";
 
 function parseNonNegativeInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -42,7 +43,7 @@ router.get('/products', async (req, res) => {
 
   if (category) {
     values.push(category);
-    where.push(`p.category = $${values.length}`);
+    where.push(`${CATEGORY_SQL} = ${values.length}`);
   }
 
   if (platform) {
@@ -70,7 +71,7 @@ router.get('/products', async (req, res) => {
          p.description,
          p.price,
          p.image_url,
-         p.category,
+         ${CATEGORY_SQL} AS category,
          p.brand,
          p.ean,
          p.slug,
@@ -139,7 +140,7 @@ router.get('/products/:id', async (req, res) => {
          p.description,
          p.price,
          p.image_url,
-         p.category,
+         ${CATEGORY_SQL} AS category,
          p.brand,
          p.ean,
          p.slug,
