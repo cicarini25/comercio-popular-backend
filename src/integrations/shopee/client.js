@@ -55,7 +55,7 @@ export class ShopeeAffiliateConnector extends MarketplaceConnector {
     };
   }
 
-  async searchOffers({ keyword = "", categoryId, page = 1, limit = DEFAULT_LIMIT } = {}) {
+  async searchOffers({ keyword = "", categoryId, itemId, shopId, page = 1, limit = DEFAULT_LIMIT } = {}) {
     this.assertConfigured();
 
     const safeLimit = Math.min(Math.max(Number(limit) || DEFAULT_LIMIT, 1), MAX_LIMIT);
@@ -63,6 +63,8 @@ export class ShopeeAffiliateConnector extends MarketplaceConnector {
 
     const query = `query ProductOfferV2(
   $productCatId: Int,
+  $itemId: Int64,
+  $shopId: Int64,
   $keyword: String,
   $sortType: Int,
   $page: Int,
@@ -70,6 +72,8 @@ export class ShopeeAffiliateConnector extends MarketplaceConnector {
 ) {
   productOfferV2(
     productCatId: $productCatId,
+    itemId: $itemId,
+    shopId: $shopId,
     keyword: $keyword,
     sortType: $sortType,
     page: $page,
@@ -112,6 +116,12 @@ export class ShopeeAffiliateConnector extends MarketplaceConnector {
     };
 
     if (keyword?.trim()) variables.keyword = keyword.trim();
+    if (itemId !== undefined && itemId !== null && /^\d+$/.test(String(itemId))) {
+      variables.itemId = Number(itemId);
+    }
+    if (shopId !== undefined && shopId !== null && /^\d+$/.test(String(shopId))) {
+      variables.shopId = Number(shopId);
+    }
     if (categoryId !== undefined && categoryId !== null && categoryId !== "") {
       variables.productCatId = Number(categoryId);
     }
@@ -252,3 +262,4 @@ function extractShopeeError(payload) {
 }
 
 export { DEFAULT_ENDPOINT, MAX_LIMIT };
+
