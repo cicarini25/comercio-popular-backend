@@ -91,7 +91,11 @@ router.post("/shopee/resolve-images", requireIntegrationAdmin, async (req, res) 
   if (items.length > 100) return res.status(400).json({ error: "A resolução aceita até 100 produtos por chamada." });
 
   try {
-    const result = await resolveShopeeImages(items);
+    const affiliateConnector = new ShopeeAffiliateConnector({
+      appId: process.env.SHOPEE_AFFILIATE_APP_ID,
+      secret: process.env.SHOPEE_AFFILIATE_SECRET
+    });
+    const result = await resolveShopeeImages(items, { affiliateConnector });
     return res.json({ ok: true, marketplace: "shopee", ...result });
   } catch (error) {
     console.error("Erro ao resolver imagens Shopee:", error);
@@ -274,6 +278,8 @@ router.get("/shopee/search", requireIntegrationAdmin, async (req, res) => {
     const result = await connector.searchOffers({
       keyword: typeof req.query.keyword === "string" ? req.query.keyword : "",
       categoryId: req.query.categoryId,
+      itemId: req.query.itemId,
+      shopId: req.query.shopId,
       page: req.query.page,
       limit: req.query.limit
     });
@@ -843,3 +849,4 @@ router.get("/mercadolivre/teste-item", requireIntegrationAdmin, async (_req, res
 });
 
 export default router;
+
