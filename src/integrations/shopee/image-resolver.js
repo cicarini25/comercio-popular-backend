@@ -60,7 +60,21 @@ async function requestJson(url, options = {}) {
   return data;
 }
 
-async function resolveOne(item) {
+function validAffiliateImageUrl(value) {
+  const url = typeof value === "string" ? value.trim() : "";
+  if (!url) return null;
+  try {
+    const parsed = new URL(imageUrlFromKey(url));
+    const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== "https:") return null;
+    if (host === "down-br.img.susercontent.com" || host.endsWith(".susercontent.com") || host.endsWith(".shopee.com.br")) {
+      return parsed.href;
+    }
+  } catch {}
+  return null;
+}
+
+async function resolveOne(item, affiliateConnector) {
   const id = String(item?.itemid ?? item?.itemId ?? "").trim();
   const productUrl = String(item?.product_link ?? item?.productUrl ?? "").trim();
   const match = productUrl.match(/^https:\/\/shopee\.com\.br\/product\/(\d+)\/(\d+)$/);
@@ -69,6 +83,19 @@ async function resolveOne(item) {
   }
 
   const shopId = match[1];
+  if (affiliateConnector?.isConfigured()) {
+    try {
+      const result = await affiliateConnector.searchOffers({ itemId: id, shopId, page: 1, limit: 1 });
+      const product = result.products.find((candidate) =>
+        candidate.externalId === id && (!candidate.shopId || candidate.shopId === shopId)
+      );
+      const imageUrl = validAffiliateImageUrl(product?.imageUrl);
+      if (imageUrl) return { itemId: id, imageUrl, source: "affiliate-open-api" };
+    } catch {
+      // Fall back to the public product endpoints when this item is unavailable through the affiliate API.
+    }
+  }
+
   const endpoints = [
     {
       url: `https://shopee.com.br/api/v4/item/get?itemid=${id}&shopid=${shopId}`,
@@ -130,7 +157,7 @@ async function resolveOne(item) {
   throw lastError || new Error("Imagem não encontrada.");
 }
 
-export async function resolveShopeeImages(items, { concurrency = DEFAULT_CONCURRENCY } = {}) {
+export async function resolveShopeeImages(items, { concurrency = DEFAULT_CONCURRENCY, affiliateConnector } = {}) {
   if (!Array.isArray(items)) throw new Error("items deve ser um array.");
   if (items.length > MAX_ITEMS) throw new Error(`Resolva no máximo ${MAX_ITEMS} imagens por chamada.`);
 
@@ -145,7 +172,7 @@ export async function resolveShopeeImages(items, { concurrency = DEFAULT_CONCURR
       if (index >= items.length) return;
       const item = items[index];
       try {
-        resolved.push(await resolveOne(item));
+        resolved.push(await resolveOne(item, affiliateConnector));
       } catch (error) {
         missing.push({
           itemId: String(item?.itemid ?? item?.itemId ?? ""),
@@ -160,3 +187,4 @@ export async function resolveShopeeImages(items, { concurrency = DEFAULT_CONCURR
   missing.sort((a,b) => a.itemId.localeCompare(b.itemId));
   return { resolved, missing };
 }
+
