@@ -92,11 +92,8 @@ export async function processNextShopeeBatch(job) {
     secret: process.env.SHOPEE_AFFILIATE_SECRET
   });
 
-  if (!connector.isConfigured()) {
-    throw new Error(
-      'Shopee Affiliate Open API não configurada. Defina SHOPEE_AFFILIATE_APP_ID e SHOPEE_AFFILIATE_SECRET.'
-    );
-  }
+  // Links fornecidos no CSV permitem importar sem credenciais da Open API.
+  // generateMissingShopeeAffiliateLinks só verifica a configuração se faltar um link.
 
   const validRows = [];
   const invalidRows = [];
