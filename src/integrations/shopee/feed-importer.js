@@ -67,13 +67,17 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
     throw new Error(`Item ${id}: link de afiliado ausente.`);
   }
 
+  const categoryOverride = typeof row.categoryOverride === 'string' ? row.categoryOverride.trim() : '';
+  if (categoryOverride.length > 100) throw new Error(`Item ${id}: categoria de destino inválida.`);
+
   return {
     id,
     title,
     price,
     originalPrice: original > price ? original : null,
     description: String(row.description ?? '').slice(0, 50000),
-    category: String(row.category || row.global_category1 || 'Shopee').slice(0, 100),
+    category: categoryOverride || String(row.category || row.global_category1 || 'Shopee').slice(0, 100),
+    categoryOverride: categoryOverride || null,
     seller: String(row.shop_name ?? row.shopName ?? '').slice(0, 180),
     image: image.href,
     productUrl: product.href,
@@ -116,7 +120,7 @@ export async function upsertShopeeProducts(products, db = pool) {
     for (const p of products) {
       const existing = await client.query('SELECT id, product_id FROM product_offers WHERE platform_id=$1 AND external_id=$2', [platformId, p.id]);
       let productId = existing.rows[0]?.product_id;
-      const metadata = JSON.stringify({ importedFrom: 'shopee-feed', shopId: p.shopId, availabilityKnown: false });
+      const metadata = JSON.stringify({ importedFrom: 'shopee-feed', shopId: p.shopId, availabilityKnown: false, categoryOverride: p.categoryOverride || null });
 
       if (productId) {
         await client.query(`UPDATE products SET title=$1, description=$2, price=$3, image_url=COALESCE($4,image_url),

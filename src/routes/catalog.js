@@ -8,7 +8,7 @@ const router = express.Router();
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
-const CATEGORY_SQL = "CASE WHEN lower(COALESCE(p.title, '')) ~ '(armário|armario|estante|guarda.?roupa|cômoda|comoda|rack|mesa de jantar|sofá|sofa|cama|colchão|colchao)' THEN 'Móveis' ELSE p.category END";
+const CATEGORY_SQL = "CASE WHEN NULLIF(p.metadata->>'categoryOverride', '') IS NOT NULL THEN p.metadata->>'categoryOverride' WHEN lower(COALESCE(p.title, '')) ~ '(armário|armario|estante|guarda.?roupa|cômoda|comoda|rack|mesa de jantar|sofá|sofa|cama|colchão|colchao)' THEN 'Móveis' ELSE p.category END";
 
 function parseNonNegativeInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -72,6 +72,7 @@ router.get('/products', async (req, res) => {
          p.price,
          p.image_url,
          ${CATEGORY_SQL} AS category,
+         p.metadata->>'categoryOverride' AS category_override,
          p.brand,
          p.ean,
          p.slug,
@@ -141,6 +142,7 @@ router.get('/products/:id', async (req, res) => {
          p.price,
          p.image_url,
          ${CATEGORY_SQL} AS category,
+         p.metadata->>'categoryOverride' AS category_override,
          p.brand,
          p.ean,
          p.slug,
