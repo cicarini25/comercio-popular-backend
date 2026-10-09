@@ -224,6 +224,138 @@ router.post("/shopee/repair-catalog-state", requireIntegrationAdmin, async (_req
   }
 });
 
+// POST /api/integrations/shopee/reclassify-import-job-categories
+// Corrige categorias de um único lote Shopee, preservando preço, imagem e links.
+router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin, async (req, res) => {
+  const jobPrefix = typeof req.body?.jobPrefix === "string" ? req.body.jobPrefix.trim() : "";
+  if (!/^[a-f0-9]{8}$/i.test(jobPrefix)) {
+    return res.status(400).json({ error: "Informe os 8 primeiros caracteres do ID do lote." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const jobResult = await client.query(
+      `SELECT j.id
+         FROM catalog_import_jobs j
+         JOIN affiliate_platforms ap ON ap.id = j.platform_id
+        WHERE ap.code = 'shopee'
+          AND j.id::text LIKE $1 || '%'
+        ORDER BY j.created_at DESC
+        LIMIT 1
+        FOR UPDATE OF j`,
+      [jobPrefix]
+    );
+    const jobId = jobResult.rows[0]?.id;
+    if (!jobId) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Não encontrei um lote Shopee com esse prefixo." });
+    }
+
+    const updated = await client.query(
+      `WITH scoped_products AS (
+         SELECT DISTINCT p.id, p.title,
+           CASE
+             WHEN lower(p.title) LIKE '%luminária%'
+               OR lower(p.title) LIKE '%luminaria%'
+               OR lower(p.title) LIKE '%abajur%'
+               THEN 'Utilidades'
+             WHEN (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
+               AND lower(p.title) LIKE '%controle%remoto%'
+               THEN 'Brinquedos'
+             ELSE NULL
+           END AS target_category
+         FROM catalog_import_items ci
+         JOIN products p ON p.id = ci.product_id
+         WHERE ci.job_id = $1
+           AND p.source = 'shopee'
+       ),
+       changed AS (
+         UPDATE products p
+            SET category = s.target_category,
+                metadata = COALESCE(p.metadata, '{}'::jsonb)
+                  || jsonb_build_object('categoryOverride', s.target_category),
+                updated_at = now()
+           FROM scoped_products s
+          WHERE p.id = s.id
+            AND s.target_category IS NOT NULL
+            AND (
+              p.category IS DISTINCT FROM s.target_category
+              OR p.metadata->>'categoryOverride' IS DISTINCT FROM s.target_category
+            )
+         RETURNING p.id, p.title, p.category
+       )
+       SELECT id, title, category FROM changed ORDER BY category, title`,
+      [jobId]
+    );
+
+    await client.query(
+      `UPDATE product_offers po
+          SET metadata = COALESCE(po.metadata, '{}'::jsonb)
+                || jsonb_build_object('categoryOverride', p.category),
+              updated_at = now()
+         FROM catalog_import_items ci
+         JOIN products p ON p.id = ci.product_id
+         JOIN affiliate_platforms ap ON ap.code = 'shopee'
+        WHERE ci.job_id = $1
+          AND po.product_id = p.id
+          AND po.platform_id = ap.id
+          AND (
+            lower(p.title) LIKE '%luminária%'
+            OR lower(p.title) LIKE '%luminaria%'
+            OR lower(p.title) LIKE '%abajur%'
+            OR (
+              (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
+              AND lower(p.title) LIKE '%controle%remoto%'
+            )
+          )`,
+      [jobId]
+    );
+
+    await client.query(
+      `UPDATE catalog_import_items ci
+          SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
+                || jsonb_build_object('category', p.category, 'categoryOverride', p.category),
+              updated_at = now()
+         FROM products p
+        WHERE ci.job_id = $1
+          AND ci.product_id = p.id
+          AND (
+            p.category = 'Utilidades' AND (
+              lower(p.title) LIKE '%luminária%'
+              OR lower(p.title) LIKE '%luminaria%'
+              OR lower(p.title) LIKE '%abajur%'
+            )
+            OR p.category = 'Brinquedos'
+              AND (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
+              AND lower(p.title) LIKE '%controle%remoto%'
+          )`,
+      [jobId]
+    );
+
+    await client.query("COMMIT");
+    const utilidades = updated.rows.filter((row) => row.category === "Utilidades").length;
+    const brinquedos = updated.rows.filter((row) => row.category === "Brinquedos").length;
+    return res.json({
+      ok: true,
+      jobPrefix,
+      updatedCount: updated.rows.length,
+      utilidades,
+      brinquedos,
+      changed: updated.rows
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao corrigir categorias do lote Shopee:", error);
+    return res.status(500).json({
+      error: "Não foi possível corrigir as categorias. Nenhuma alteração parcial foi confirmada."
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/integrations/shopee/health
 router.get("/shopee/health", requireIntegrationAdmin, async (_req, res) => {
   const connector = new ShopeeAffiliateConnector({
