@@ -257,7 +257,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
     await client.query("BEGIN");
 
     const jobResult = await client.query(
-      \`SELECT j.id::text AS id, j.status, j.requested_count, j.created_at
+      `SELECT j.id::text AS id, j.status, j.requested_count, j.created_at
          FROM catalog_import_jobs j
          JOIN affiliate_platforms ap ON ap.id = j.platform_id
         WHERE ap.code = 'shopee'
@@ -266,7 +266,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
              WHERE j.id::text LIKE requested.prefix || '%'
           )
         ORDER BY j.created_at ASC
-        FOR UPDATE OF j\`,
+        FOR UPDATE OF j`,
       [jobPrefixes]
     );
 
@@ -282,7 +282,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
 
     const jobIds = jobResult.rows.map((job) => job.id);
     const productResult = await client.query(
-      \`SELECT DISTINCT ON (p.id)
+      `SELECT DISTINCT ON (p.id)
               p.id::text AS product_id,
               p.title,
               p.category AS current_category,
@@ -293,7 +293,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
         WHERE ci.job_id = ANY($1::uuid[])
           AND p.source = 'shopee'
           AND ci.product_id IS NOT NULL
-        ORDER BY p.id, ci.created_at DESC\`,
+        ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
     );
 
@@ -312,12 +312,12 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
     });
 
     const linkedResult = await client.query(
-      \`SELECT ci.job_id::text AS job_id,
+      `SELECT ci.job_id::text AS job_id,
               COUNT(DISTINCT ci.product_id)::int AS product_count
          FROM catalog_import_items ci
         WHERE ci.job_id = ANY($1::uuid[])
           AND ci.product_id IS NOT NULL
-        GROUP BY ci.job_id\`,
+        GROUP BY ci.job_id`,
       [jobIds]
     );
     const totalLinkedRecords = linkedResult.rows.reduce((sum, row) => sum + Number(row.product_count || 0), 0);
@@ -331,7 +331,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
       })));
 
       const updated = await client.query(
-        \`UPDATE products p
+        `UPDATE products p
             SET category = changes.category,
                 metadata = COALESCE(p.metadata, '{}'::jsonb)
                   || jsonb_build_object('categoryOverride', changes.category),
@@ -342,25 +342,25 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
             AND (
               p.category IS DISTINCT FROM changes.category
               OR p.metadata->>'categoryOverride' IS DISTINCT FROM changes.category
-            )\`,
+            )`,
         [changesJson]
       );
       updatedCount = updated.rowCount || 0;
 
       await client.query(
-        \`UPDATE product_offers po
+        `UPDATE product_offers po
             SET metadata = COALESCE(po.metadata, '{}'::jsonb)
                   || jsonb_build_object('categoryOverride', changes.category),
                 updated_at = now()
            FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
            JOIN products p ON p.id = changes.id AND p.source = 'shopee'
           WHERE po.product_id = p.id
-            AND po.metadata->>'categoryOverride' IS DISTINCT FROM changes.category\`,
+            AND po.metadata->>'categoryOverride' IS DISTINCT FROM changes.category`,
         [changesJson]
       );
 
       await client.query(
-        \`UPDATE catalog_import_items ci
+        `UPDATE catalog_import_items ci
             SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
                   || jsonb_build_object(
                     'global_category1', changes.category,
@@ -370,7 +370,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
                 updated_at = now()
            FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
           WHERE ci.job_id = ANY($2::uuid[])
-            AND ci.product_id = changes.id\`,
+            AND ci.product_id = changes.id`,
         [changesJson, jobIds]
       );
     }
