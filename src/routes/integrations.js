@@ -343,8 +343,11 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 
     if (!dryRun) {
       const changes = products
-        .filter((product) => product.suggestedCategory && product.suggestedCategory !== "Outros")
-        .map((product) => ({ id: product.productId, category: product.suggestedCategory }));
+        .filter((product) => product.willChange && normalizeShopeeSiteCategory(product.suggestedCategory))
+        .map((product) => ({
+          id: product.productId,
+          category: normalizeShopeeSiteCategory(product.suggestedCategory)
+        }));
       if (changes.length) {
         const changesJson = JSON.stringify(changes);
         await client.query(
