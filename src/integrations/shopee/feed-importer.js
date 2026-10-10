@@ -1,4 +1,5 @@
 import pool from '../../db/pool.js';
+import { normalizeShopeeSiteCategory, resolveShopeeSiteCategory } from './category-resolver.js';
 
 export const MAX_SYNC_ITEMS = 100;
 
@@ -67,17 +68,29 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
     throw new Error(`Item ${id}: link de afiliado ausente.`);
   }
 
-  const categoryOverride = typeof row.categoryOverride === 'string' ? row.categoryOverride.trim() : '';
-  if (categoryOverride.length > 100) throw new Error(`Item ${id}: categoria de destino inválida.`);
+  const selectedCategory = typeof row.categoryOverride === 'string' ? row.categoryOverride.trim() : '';
+  if (selectedCategory.length > 100) throw new Error(`Item ${id}: categoria de destino inválida.`);
+  const description = String(row.description ?? '').slice(0, 50000);
+  const sourceCategory = row.global_category1 ?? row.category ?? '';
+  const resolvedCategory = resolveShopeeSiteCategory({
+    category: sourceCategory,
+    title,
+    description,
+    categoryOverride: selectedCategory,
+    currentCategory: row.category
+  });
+  const normalizedSelectedCategory = normalizeShopeeSiteCategory(selectedCategory);
+  const finalCategory = resolvedCategory || normalizedSelectedCategory
+    || String(row.category || row.global_category1 || 'Outros').slice(0, 100);
 
   return {
     id,
     title,
     price,
     originalPrice: original > price ? original : null,
-    description: String(row.description ?? '').slice(0, 50000),
-    category: categoryOverride || String(row.category || row.global_category1 || 'Shopee').slice(0, 100),
-    categoryOverride: categoryOverride || null,
+    description,
+    category: finalCategory,
+    categoryOverride: resolvedCategory || normalizedSelectedCategory || null,
     seller: String(row.shop_name ?? row.shopName ?? '').slice(0, 180),
     image: image.href,
     productUrl: product.href,
