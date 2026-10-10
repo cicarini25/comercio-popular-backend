@@ -81,8 +81,7 @@ const categoryAliases = new Map(Object.entries({
   'automobiles': 'AUTO & ACESSÓRIOS',
   'car': 'AUTO & ACESSÓRIOS',
   'cars': 'AUTO & ACESSÓRIOS',
-  'other': 'Utilidades',
-  'others': 'Utilidades'
+  'household goods': 'Utilidades'
 }).map(([key, category]) => [normalizeKey(key), category]));
 
 function mapRawCategory(rawCategory) {
@@ -102,7 +101,7 @@ function mapRawCategory(rawCategory) {
 function inferCategoryFromText(title, description = '') {
   const text = normalizeKey(String(title ?? '') + ' ' + String(description ?? ''));
 
-  if (/(motorcycle|motorbike|motocross|motociclet|motociclista|motoqueir|pecas? de moto|moto pecas|acessorios? de moto|acessorios? para moto|capacete.{0,30}(moto|motocicl)|bauleto|bau.{0,15}moto|carenagem|retrovisor.{0,20}moto|manete.{0,20}moto|corrente.{0,20}moto|pneu.{0,20}moto|pastilha.{0,20}moto|protetor de motor|escapamento.{0,20}moto|luvas? (de|para) motociclista|jaqueta.{0,20}moto|guid(ao|on).{0,20}moto|\b(cg|biz|titan|bros|factor|fazer|xre|pcx|nmax)\b)/.test(text) || /(^| )moto( |$)/.test(text)) {
+  if (/(motorcycle|motorbike|motocross|motociclet|motociclista|motoqueir|pecas? de moto|moto pecas|acessorios? de moto|acessorios? para moto|capacete.{0,30}(moto|motocicl)|bauleto|bau.{0,15}moto|carenagem|retrovisor.{0,20}moto|manete.{0,20}moto|corrente.{0,20}moto|pneu.{0,20}moto|pastilha.{0,20}moto|protetor de motor|escapamento.{0,20}moto|luvas? (de|para) motociclista|jaqueta.{0,20}moto|guid(ao|on).{0,20}moto|\b(cg|biz|titan|bros|factor|fazer|xre|pcx|nmax)\b)/.test(text) || /(^| )motos?( |$)/.test(text)) {
     return 'MOTOS & ACESSÓRIOS';
   }
   if (/(automotivo|automotiva|carro|veicular|veiculo|radiador|carroceria|parachoque|para choque|cambio automotivo|peca automotiva|acessorio automotivo|tapete automotivo|capa para carro|som automotivo|bateria automotiva|oleo de motor|retrovisor de carro|pneu de carro|farol automotivo|car accessories|auto parts)/.test(text)) {
