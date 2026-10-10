@@ -6,6 +6,7 @@ import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integr
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
 import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
 import { resolveShopeeImages } from "../integrations/shopee/image-resolver.js";
+import { getShopeeSuggestedCategorySignals, normalizeShopeeSiteCategory, resolveShopeeSiteCategory } from "../integrations/shopee/category-resolver.js";
 import {
   buildMercadoLivreAuthorizationUrl,
   createMercadoLivreOAuthState,
@@ -221,6 +222,214 @@ router.post("/shopee/repair-catalog-state", requireIntegrationAdmin, async (_req
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Falha ao reparar catálogo Shopee."
     });
+  }
+});
+
+// POST /api/integrations/shopee/reclassify-import-jobs-auto-categories
+// Analisa os produtos dos lotes selecionados e os organiza nas categorias da vitrine.
+// Preview é o padrão; alterações só são confirmadas quando dryRun=false.
+router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegrationAdmin, async (req, res) => {
+  const rawPrefixes = Array.isArray(req.body?.jobPrefixes)
+    ? req.body.jobPrefixes
+    : (typeof req.body?.jobPrefixes === "string" ? req.body.jobPrefixes.split(/[;,\s]+/) : []);
+  const jobPrefixes = [...new Set(rawPrefixes
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean))];
+
+  if (!jobPrefixes.length || jobPrefixes.length > 10 || jobPrefixes.some((prefix) => !/^[a-f0-9]{8}$/i.test(prefix))) {
+    return res.status(400).json({
+      error: "Informe de 1 a 10 prefixos válidos de 8 caracteres hexadecimais, separados por vírgula."
+    });
+  }
+
+  const dryRun = req.body?.dryRun !== false;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const jobResult = await client.query(
+      `SELECT j.id::text AS id, j.status, j.requested_count, j.created_at
+         FROM catalog_import_jobs j
+         JOIN affiliate_platforms ap ON ap.id = j.platform_id
+        WHERE ap.code = 'shopee'
+          AND EXISTS (
+            SELECT 1 FROM unnest($1::text[]) AS requested(prefix)
+             WHERE j.id::text LIKE requested.prefix || '%'
+          )
+        ORDER BY j.created_at ASC
+        FOR UPDATE OF j`,
+      [jobPrefixes]
+    );
+
+    const missingPrefixes = jobPrefixes.filter((prefix) => !jobResult.rows.some((job) => job.id.startsWith(prefix)));
+    if (missingPrefixes.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "Não encontrei todos os lotes Shopee informados.",
+        missingPrefixes,
+        foundJobs: jobResult.rows.map((job) => ({ id: job.id, status: job.status }))
+      });
+    }
+
+    const jobIds = jobResult.rows.map((job) => job.id);
+    const productResult = await client.query(
+      `SELECT DISTINCT ON (p.id)
+              p.id::text AS product_id,
+              p.title,
+              p.description,
+              p.category AS current_category,
+              p.metadata,
+              ci.normalized_payload->>'global_category1' AS feed_category,
+              ci.job_id::text AS job_id
+         FROM catalog_import_items ci
+         JOIN products p ON p.id = ci.product_id
+        WHERE ci.job_id = ANY($1::uuid[])
+          AND p.source = 'shopee'
+          AND ci.product_id IS NOT NULL
+        ORDER BY p.id, ci.created_at DESC`,
+      [jobIds]
+    );
+
+    const products = productResult.rows.map((row) => {
+      const currentMetadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+      const sourceCategory = row.feed_category || "";
+      const selectedCategory = currentMetadata.categoryOverride || "";
+      const signals = getShopeeSuggestedCategorySignals({
+        category: sourceCategory,
+        title: row.title,
+        description: row.description
+      });
+      const suggestedCategory = resolveShopeeSiteCategory({
+        category: sourceCategory,
+        title: row.title,
+        description: row.description,
+        categoryOverride: selectedCategory,
+        currentCategory: row.current_category
+      });
+      const currentCanonical = normalizeShopeeSiteCategory(row.current_category);
+      const matchedBy = signals.inferredFromTitle
+        ? "Título do produto"
+        : signals.mappedFromFeed
+          ? "Categoria do lote/feed"
+          : signals.inferredFromDescription
+            ? "Descrição do produto"
+            : normalizeShopeeSiteCategory(selectedCategory)
+              ? "Categoria selecionada no lote"
+              : currentCanonical
+                ? "Categoria atual mantida"
+                : "Sem sinal suficiente";
+
+      return {
+        productId: row.product_id,
+        title: row.title,
+        currentCategory: row.current_category || "Sem categoria",
+        suggestedCategory: suggestedCategory || row.current_category || "Outros",
+        matchedBy,
+        jobId: row.job_id,
+        willChange: Boolean(suggestedCategory) && (
+          row.current_category !== suggestedCategory ||
+          currentMetadata.categoryOverride !== suggestedCategory
+        )
+      };
+    });
+
+    const categoryCounts = {};
+    for (const product of products) {
+      categoryCounts[product.suggestedCategory] = (categoryCounts[product.suggestedCategory] || 0) + 1;
+    }
+    const motoCount = products.filter((product) => product.suggestedCategory === "MOTOS & ACESSÓRIOS").length;
+    const planned = products.filter((product) => product.willChange && product.suggestedCategory).length;
+
+    if (!dryRun) {
+      const changes = products
+        .filter((product) => product.suggestedCategory && product.suggestedCategory !== "Outros")
+        .map((product) => ({ id: product.productId, category: product.suggestedCategory }));
+      if (changes.length) {
+        const changesJson = JSON.stringify(changes);
+        await client.query(
+          `UPDATE products p
+              SET category = changes.category,
+                  metadata = COALESCE(p.metadata, '{}'::jsonb)
+                    || jsonb_build_object('categoryOverride', changes.category),
+                  updated_at = now()
+             FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+            WHERE p.id = changes.id
+              AND p.source = 'shopee'
+              AND (
+                p.category IS DISTINCT FROM changes.category
+                OR p.metadata->>'categoryOverride' IS DISTINCT FROM changes.category
+              )`,
+          [changesJson]
+        );
+
+        await client.query(
+          `UPDATE product_offers po
+              SET metadata = COALESCE(po.metadata, '{}'::jsonb)
+                    || jsonb_build_object('categoryOverride', changes.category),
+                  updated_at = now()
+             FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+             JOIN products p ON p.id = changes.id AND p.source = 'shopee'
+            WHERE po.product_id = p.id
+              AND po.metadata->>'categoryOverride' IS DISTINCT FROM changes.category`,
+          [changesJson]
+        );
+
+        await client.query(
+          `UPDATE catalog_import_items ci
+              SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
+                    || jsonb_build_object(
+                      'global_category1', changes.category,
+                      'category', changes.category,
+                      'categoryOverride', changes.category
+                    ),
+                  updated_at = now()
+             FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+            WHERE ci.job_id = ANY($2::uuid[])
+              AND ci.product_id = changes.id`,
+          [changesJson, jobIds]
+        );
+      }
+    }
+
+    if (dryRun) await client.query("ROLLBACK");
+    else await client.query("COMMIT");
+
+    const perJobResult = await pool.query(
+      `SELECT ci.job_id::text AS job_id, COUNT(DISTINCT ci.product_id)::int AS product_count
+         FROM catalog_import_items ci
+        WHERE ci.job_id = ANY($1::uuid[])
+          AND ci.product_id IS NOT NULL
+        GROUP BY ci.job_id`,
+      [jobIds]
+    );
+
+    return res.json({
+      ok: true,
+      dryRun,
+      jobPrefixes,
+      jobs: jobResult.rows.map((job) => ({
+        id: job.id,
+        prefix: job.id.slice(0, 8),
+        status: job.status,
+        requestedCount: job.requested_count,
+        linkedProductCount: Number(perJobResult.rows.find((row) => row.job_id === job.id)?.product_count || 0)
+      })),
+      totalProducts: products.length,
+      categoryCounts,
+      motoCount,
+      plannedChanges: planned,
+      updatedCount: dryRun ? 0 : planned,
+      products
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao classificar automaticamente lotes Shopee:", error);
+    return res.status(500).json({
+      error: "Não foi possível analisar os lotes. Nenhuma alteração parcial foi confirmada."
+    });
+  } finally {
+    client.release();
   }
 });
 
