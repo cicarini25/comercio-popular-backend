@@ -110,7 +110,8 @@ export class ShopeeAffiliateConnector extends MarketplaceConnector {
 }`;
 
     const variables = {
-      sortType: 5,
+      // Consultas por nome precisam priorizar a correspondência com o produto.
+      sortType: keyword?.trim() ? 1 : 5,
       page: safePage,
       limit: safeLimit
     };
