@@ -284,6 +284,28 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
         });
       }
 
+      if (req.body?.dryRun === true) {
+        const preview = await client.query(
+          `SELECT DISTINCT p.id, p.title, p.category
+             FROM catalog_import_items ci
+             JOIN products p ON p.id = ci.product_id
+            WHERE ci.job_id = $1
+              AND p.source = 'shopee'
+            ORDER BY p.title
+            LIMIT 10`,
+          [jobId]
+        );
+        await client.query("ROLLBACK");
+        return res.json({
+          ok: true,
+          dryRun: true,
+          jobPrefix,
+          category: targetCategory,
+          matchedCount,
+          preview: preview.rows
+        });
+      }
+
       const changed = await client.query(
         `WITH scoped_products AS (
            SELECT DISTINCT p.id, p.title
