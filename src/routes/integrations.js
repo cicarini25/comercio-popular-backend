@@ -228,8 +228,22 @@ router.post("/shopee/repair-catalog-state", requireIntegrationAdmin, async (_req
 // Corrige categorias de um único lote Shopee, preservando preço, imagem e links.
 router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin, async (req, res) => {
   const jobPrefix = typeof req.body?.jobPrefix === "string" ? req.body.jobPrefix.trim() : "";
+  const targetCategory = typeof req.body?.targetCategory === "string" ? req.body.targetCategory.trim() : "";
+  const allowedCategories = new Set([
+    "Utilidades", "Casa & Cozinha", "Ferramentas", "Eletrodomésticos",
+    "ELETRO & ACESSÓRIOS", "Móveis", "ELETRÔNICOS", "RELÓGIOS", "Games",
+    "Computadores", "Notebook", "Smartphones", "Acessórios para celulares",
+    "Aparelhos de Som", "Fones & Headphones", "Instrumentos Musicais",
+    "AUTO & ACESSÓRIOS", "MOTOS & ACESSÓRIOS", "Pets", "Moda Masculina",
+    "Moda Feminina", "Moda Infantil", "ARMARINHOS & TRICÔ", "Brinquedos",
+    "TVs", "Calçados", "Esportes & Lazer", "Bike Elétrica e Acessórios",
+    "Cuidado & Beleza", "Alimentos & Bebidas"
+  ]);
   if (!/^[a-f0-9]{8}$/i.test(jobPrefix)) {
     return res.status(400).json({ error: "Informe os 8 primeiros caracteres do ID do lote." });
+  }
+  if (targetCategory && !allowedCategories.has(targetCategory)) {
+    return res.status(400).json({ error: "Categoria de destino inválida." });
   }
 
   const client = await pool.connect();
@@ -251,6 +265,91 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
     if (!jobId) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Não encontrei um lote Shopee com esse prefixo." });
+    }
+
+    if (targetCategory) {
+      const matchedResult = await client.query(
+        `SELECT COUNT(DISTINCT p.id)::int AS count
+           FROM catalog_import_items ci
+           JOIN products p ON p.id = ci.product_id
+          WHERE ci.job_id = $1
+            AND p.source = 'shopee'`,
+        [jobId]
+      );
+      const matchedCount = Number(matchedResult.rows[0]?.count || 0);
+      if (!matchedCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({
+          error: "O lote foi encontrado, mas não há produtos Shopee importados vinculados a ele."
+        });
+      }
+
+      const changed = await client.query(
+        `WITH scoped_products AS (
+           SELECT DISTINCT p.id, p.title
+             FROM catalog_import_items ci
+             JOIN products p ON p.id = ci.product_id
+            WHERE ci.job_id = $1
+              AND p.source = 'shopee'
+         ),
+         changed AS (
+           UPDATE products p
+              SET category = $2,
+                  metadata = COALESCE(p.metadata, '{}'::jsonb)
+                    || jsonb_build_object('categoryOverride', $2),
+                  updated_at = now()
+             FROM scoped_products s
+            WHERE p.id = s.id
+              AND (
+                p.category IS DISTINCT FROM $2
+                OR p.metadata->>'categoryOverride' IS DISTINCT FROM $2
+              )
+           RETURNING p.id, p.title, p.category
+         )
+         SELECT id, title, category FROM changed ORDER BY title`,
+        [jobId, targetCategory]
+      );
+
+      await client.query(
+        `UPDATE product_offers po
+            SET metadata = COALESCE(po.metadata, '{}'::jsonb)
+                  || jsonb_build_object('categoryOverride', $2),
+                updated_at = now()
+           FROM catalog_import_items ci
+           JOIN products p ON p.id = ci.product_id
+           JOIN affiliate_platforms ap ON ap.code = 'shopee'
+          WHERE ci.job_id = $1
+            AND po.product_id = p.id
+            AND po.platform_id = ap.id
+            AND p.source = 'shopee'`,
+        [jobId, targetCategory]
+      );
+
+      await client.query(
+        `UPDATE catalog_import_items ci
+            SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'global_category1', $2,
+                    'category', $2,
+                    'categoryOverride', $2
+                  ),
+                updated_at = now()
+           FROM products p
+          WHERE ci.job_id = $1
+            AND ci.product_id = p.id
+            AND p.source = 'shopee'`,
+        [jobId, targetCategory]
+      );
+
+      await client.query("COMMIT");
+      return res.json({
+        ok: true,
+        jobPrefix,
+        category: targetCategory,
+        matchedCount,
+        updatedCount: changed.rows.length,
+        changed: changed.rows
+      });
     }
 
     const updated = await client.query(
