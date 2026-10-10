@@ -138,18 +138,34 @@ function inferCategoryFromText(title, description = '') {
   return undefined;
 }
 
-export function resolveShopeeSiteCategory({ category, title = '', description = '' } = {}) {
+export function normalizeShopeeSiteCategory(value) {
+  return mapRawCategory(value);
+}
+
+export function resolveShopeeSiteCategory({
+  category,
+  title = '',
+  description = '',
+  categoryOverride,
+  currentCategory
+} = {}) {
+  // A clear product title wins over a broad or incorrectly selected import category.
   const titleCategory = inferCategoryFromText(title, '');
   if (titleCategory) return titleCategory;
+
   const sourceCategory = mapRawCategory(category);
   if (sourceCategory) return sourceCategory;
+
   const descriptionCategory = inferCategoryFromText('', description);
-  return descriptionCategory || 'Utilidades';
+  if (descriptionCategory) return descriptionCategory;
+
+  return mapRawCategory(categoryOverride) || mapRawCategory(currentCategory);
 }
 
 export function getShopeeSuggestedCategorySignals({ category, title = '', description = '' } = {}) {
   const suggested = resolveShopeeSiteCategory({ category, title, description });
   const inferredFromTitle = Boolean(inferCategoryFromText(title, ''));
   const mappedFromFeed = Boolean(mapRawCategory(category));
-  return { suggested, inferredFromTitle, mappedFromFeed };
+  const inferredFromDescription = Boolean(inferCategoryFromText('', description));
+  return { suggested, inferredFromTitle, mappedFromFeed, inferredFromDescription };
 }
