@@ -101,6 +101,11 @@ function mapRawCategory(rawCategory) {
 function inferCategoryFromText(title, description = '') {
   const text = normalizeKey(String(title ?? '') + ' ' + String(description ?? ''));
 
+  // Motorola's Moto phone models must not be mistaken for motorcycles.
+  const isPhoneModel = /(motorola|iphone|smartphone|celular|samsung|galaxy|xiaomi|redmi|poco|\bmoto ?[gexzc](?:[0-9]|\b))/.test(text);
+  const isPhoneFilmOrCase = /(pelicula|screen protector|protetor (de )?tela|capinha|\bcapa\b|phone case)/.test(text);
+  if (isPhoneModel && isPhoneFilmOrCase) return 'Acessórios para celulares';
+
   if (/(motorcycle|motorbike|motocross|motociclet|motociclista|motoqueir|pecas? de moto|moto pecas|acessorios? de moto|acessorios? para moto|capacete.{0,30}(moto|motocicl)|bauleto|bau.{0,15}moto|carenagem|retrovisor.{0,20}moto|manete.{0,20}moto|corrente.{0,20}moto|pneu.{0,20}moto|pastilha.{0,20}moto|protetor de motor|escapamento.{0,20}moto|luvas? (de|para) motociclista|jaqueta.{0,20}moto|guid(ao|on).{0,20}moto|\b(cg|biz|titan|bros|factor|fazer|xre|pcx|nmax)\b)/.test(text) || /(^| )motos?( |$)/.test(text)) {
     return 'MOTOS & ACESSÓRIOS';
   }
