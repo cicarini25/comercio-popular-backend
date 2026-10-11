@@ -503,15 +503,15 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
          ),
          changed AS (
            UPDATE products p
-              SET category = $2,
+              SET category = $2::text,
                   metadata = COALESCE(p.metadata, '{}'::jsonb)
-                    || jsonb_build_object('categoryOverride', $2),
+                    || jsonb_build_object('categoryOverride', $2::text),
                   updated_at = now()
              FROM scoped_products s
             WHERE p.id = s.id
               AND (
-                p.category IS DISTINCT FROM $2
-                OR p.metadata->>'categoryOverride' IS DISTINCT FROM $2
+                p.category IS DISTINCT FROM $2::text
+                OR p.metadata->>'categoryOverride' IS DISTINCT FROM $2::text
               )
            RETURNING p.id, p.title, p.category
          )
@@ -522,7 +522,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
       await client.query(
         `UPDATE product_offers po
             SET metadata = COALESCE(po.metadata, '{}'::jsonb)
-                  || jsonb_build_object('categoryOverride', $2),
+                  || jsonb_build_object('categoryOverride', $2::text),
                 updated_at = now()
            FROM catalog_import_items ci
            JOIN products p ON p.id = ci.product_id
@@ -538,9 +538,9 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
         `UPDATE catalog_import_items ci
             SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
                   || jsonb_build_object(
-                    'global_category1', $2,
-                    'category', $2,
-                    'categoryOverride', $2
+                    'global_category1', $2::text,
+                    'category', $2::text,
+                    'categoryOverride', $2::text
                   ),
                 updated_at = now()
            FROM products p
