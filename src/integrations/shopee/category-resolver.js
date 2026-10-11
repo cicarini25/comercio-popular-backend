@@ -4,7 +4,7 @@ const SITE_CATEGORIES = [
   'Computadores', 'Notebook', 'Smartphones', 'Acessórios para celulares',
   'Aparelhos de Som', 'Fones & Headphones', 'Instrumentos Musicais',
   'AUTO & ACESSÓRIOS', 'MOTOS & ACESSÓRIOS', 'Pets', 'Moda Masculina',
-  'Moda Feminina', 'Moda Infantil', 'ARMARINHOS & TRICÔ', 'Brinquedos',
+  'Moda Feminina', 'Moda Infantil', 'MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA', 'ARMARINHOS & TRICÔ', 'Brinquedos',
   'TVs', 'Calçados Masculino', 'Calçados Femininos', 'Esportes & Lazer', 'Bike Elétrica e Acessórios',
   'Cuidado & Beleza', 'Alimentos & Bebidas'
 ];
@@ -170,7 +170,7 @@ export function resolveShopeeSiteCategory({
   currentCategory
 } = {}) {
   const selectedNewCategory = mapRawCategory(categoryOverride) || mapRawCategory(category);
-  if (selectedNewCategory === 'CAMA/MESA/BANHO' || selectedNewCategory === 'MODA VERÃO PRAIA') return selectedNewCategory;
+  if (selectedNewCategory === 'CAMA/MESA/BANHO' || selectedNewCategory === 'MODA VERÃO PRAIA' || selectedNewCategory === 'MODA INFANTIL FEMININA' || selectedNewCategory === 'MODA INFANTIL MASCULINA') return selectedNewCategory;
   const declaredFootwear = [categoryOverride, category].find((value) =>
     ['calcados masculino', 'calcados masculinos', 'calcados femininos', 'men shoes', 'mens shoes', 'women shoes', 'womens shoes'].includes(normalizeKey(value))
   );
