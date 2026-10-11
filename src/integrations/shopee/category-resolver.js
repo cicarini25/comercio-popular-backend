@@ -1,5 +1,5 @@
 const SITE_CATEGORIES = [
-  'Utilidades', 'Casa & Cozinha', 'Ferramentas', 'Eletrodomésticos',
+  'Utilidades', 'Casa & Cozinha', 'CAMA/MESA/BANHO', 'MODA VERÃO PRAIA', 'Ferramentas', 'Eletrodomésticos',
   'ELETRO & ACESSÓRIOS', 'Móveis', 'ELETRÔNICOS', 'RELÓGIOS', 'Games',
   'Computadores', 'Notebook', 'Smartphones', 'Acessórios para celulares',
   'Aparelhos de Som', 'Fones & Headphones', 'Instrumentos Musicais',
@@ -18,6 +18,10 @@ const normalizeKey = (value) => String(value ?? '')
 
 const canonicalCategories = new Map(SITE_CATEGORIES.map((category) => [normalizeKey(category), category]));
 const categoryAliases = new Map(Object.entries({
+  'cama mesa e banho': 'CAMA/MESA/BANHO',
+  'cama mesa banho': 'CAMA/MESA/BANHO',
+  'moda praia': 'MODA VERÃO PRAIA',
+  'moda verao e praia': 'MODA VERÃO PRAIA',
   'armarinhos': 'ARMARINHOS & TRICÔ',
   'trico': 'ARMARINHOS & TRICÔ',
   'automotivo': 'AUTO & ACESSÓRIOS',
@@ -165,6 +169,8 @@ export function resolveShopeeSiteCategory({
   categoryOverride,
   currentCategory
 } = {}) {
+  const selectedNewCategory = mapRawCategory(categoryOverride) || mapRawCategory(category);
+  if (selectedNewCategory === 'CAMA/MESA/BANHO' || selectedNewCategory === 'MODA VERÃO PRAIA') return selectedNewCategory;
   const declaredFootwear = [categoryOverride, category].find((value) =>
     ['calcados masculino', 'calcados masculinos', 'calcados femininos', 'men shoes', 'mens shoes', 'women shoes', 'womens shoes'].includes(normalizeKey(value))
   );
