@@ -450,6 +450,196 @@ router.post("/shopee/reclassify-product-category", requireIntegrationAdmin, asyn
   } finally { client.release(); }
 });
 
+
+/**
+ * Classifica automaticamente produtos de lotes Shopee por sinais claros no título.
+ * A prévia não altera dados; a aplicação atualiza apenas os itens com categoria sugerida.
+ */
+router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegrationAdmin, async (req, res) => {
+  const rawPrefixes = Array.isArray(req.body?.jobPrefixes)
+    ? req.body.jobPrefixes
+    : (typeof req.body?.jobPrefixes === "string" ? req.body.jobPrefixes.split(/[;,\\s]+/) : []);
+  const jobPrefixes = [...new Set(rawPrefixes
+    .filter((value) => typeof value === "string")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean))];
+
+  if (!jobPrefixes.length || jobPrefixes.length > 10 || jobPrefixes.some((prefix) => !/^[a-f0-9]{8}$/.test(prefix))) {
+    return res.status(400).json({
+      error: "Informe de 1 a 10 prefixos válidos de 8 caracteres hexadecimais, separados por vírgula."
+    });
+  }
+
+  const dryRun = req.body?.dryRun !== false;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const jobResult = await client.query(
+      `SELECT j.id::text AS id, j.status, j.requested_count, j.created_at
+         FROM catalog_import_jobs j
+         JOIN affiliate_platforms ap ON ap.id = j.platform_id
+        WHERE ap.code = 'shopee'
+          AND EXISTS (
+            SELECT 1 FROM unnest($1::text[]) AS requested(prefix)
+             WHERE j.id::text LIKE requested.prefix || '%'
+          )
+        ORDER BY j.created_at ASC
+        FOR UPDATE OF j`,
+      [jobPrefixes]
+    );
+
+    const missingPrefixes = jobPrefixes.filter((prefix) => !jobResult.rows.some((job) => job.id.startsWith(prefix)));
+    if (missingPrefixes.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({
+        error: "Não encontrei todos os lotes Shopee informados.",
+        missingPrefixes,
+        foundJobs: jobResult.rows.map((job) => ({ id: job.id, status: job.status }))
+      });
+    }
+
+    const jobIds = jobResult.rows.map((job) => job.id);
+    const productResult = await client.query(
+      `SELECT DISTINCT ON (p.id)
+              p.id::text AS product_id,
+              p.title,
+              p.category AS current_category,
+              p.metadata,
+              ci.job_id::text AS job_id
+         FROM catalog_import_items ci
+         JOIN products p ON p.id = ci.product_id
+        WHERE ci.job_id = ANY($1::uuid[])
+          AND p.source = 'shopee'
+          AND ci.product_id IS NOT NULL
+        ORDER BY p.id, ci.created_at DESC`,
+      [jobIds]
+    );
+
+    const accessoryPattern = /\\b(espalhador(?:es)?|queimador(?:es)?|tampinhas?|tampas?\\s+(?:de|do|da)\\s+(?:fogao|cooktop)|interruptor(?:es)?|chicotes?|protetor(?:es)?\\s+(?:de\\s+)?fogao|bacia(?:s)?\\s+queimador|catenaria|pecas?\\s+(?:de|para)\\s+(?:fogao|cooktop)|kit\\s+\\d*\\s*(?:espalhador|queimador|tampinha))/i;
+
+    const products = productResult.rows.map((row) => {
+      const normalizedTitle = String(row.title || "")
+        .normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
+      const isAccessory = row.current_category === "Eletrodomésticos" && accessoryPattern.test(normalizedTitle);
+      const suggestedCategory = isAccessory ? "ELETRO & ACESSÓRIOS" : (row.current_category || "Sem categoria");
+      const matchedBy = isAccessory ? "acessório de eletrodoméstico" : "sem alteração";
+      const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+      const willChange = row.current_category !== suggestedCategory
+        || metadata.categoryOverride !== suggestedCategory;
+      return {
+        productId: row.product_id,
+        title: row.title,
+        currentCategory: row.current_category || "Sem categoria",
+        suggestedCategory,
+        matchedBy,
+        jobId: row.job_id,
+        willChange
+      };
+    });
+
+    const changes = products.filter((product) => product.willChange && product.suggestedCategory !== product.currentCategory);
+    const categoryCounts = products.reduce((counts, product) => {
+      counts[product.suggestedCategory] = (counts[product.suggestedCategory] || 0) + 1;
+      return counts;
+    }, {});
+    const linkedResult = await client.query(
+      `SELECT ci.job_id::text AS job_id,
+              COUNT(DISTINCT ci.product_id)::int AS product_count
+         FROM catalog_import_items ci
+        WHERE ci.job_id = ANY($1::uuid[])
+          AND ci.product_id IS NOT NULL
+        GROUP BY ci.job_id`,
+      [jobIds]
+    );
+    const updatedCount = 0;
+    let appliedCount = 0;
+
+    if (!dryRun && changes.length) {
+      const changesJson = JSON.stringify(changes.map((product) => ({
+        id: product.productId,
+        category: product.suggestedCategory
+      })));
+
+      const updated = await client.query(
+        `UPDATE products p
+            SET category = changes.category,
+                metadata = COALESCE(p.metadata, '{}'::jsonb)
+                  || jsonb_build_object('categoryOverride', changes.category),
+                updated_at = now()
+           FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+          WHERE p.id = changes.id
+            AND p.source = 'shopee'
+            AND (
+              p.category IS DISTINCT FROM changes.category
+              OR p.metadata->>'categoryOverride' IS DISTINCT FROM changes.category
+            )`,
+        [changesJson]
+      );
+      appliedCount = updated.rowCount || 0;
+
+      await client.query(
+        `UPDATE product_offers po
+            SET metadata = COALESCE(po.metadata, '{}'::jsonb)
+                  || jsonb_build_object('categoryOverride', changes.category),
+                updated_at = now()
+           FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+           JOIN products p ON p.id = changes.id AND p.source = 'shopee'
+          WHERE po.product_id = p.id
+            AND po.metadata->>'categoryOverride' IS DISTINCT FROM changes.category`,
+        [changesJson]
+      );
+
+      await client.query(
+        `UPDATE catalog_import_items ci
+            SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
+                  || jsonb_build_object(
+                    'global_category1', changes.category,
+                    'category', changes.category,
+                    'categoryOverride', changes.category
+                  ),
+                updated_at = now()
+           FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+          WHERE ci.job_id = ANY($2::uuid[])
+            AND ci.product_id = changes.id`,
+        [changesJson, jobIds]
+      );
+    }
+
+    if (dryRun) await client.query("ROLLBACK");
+    else await client.query("COMMIT");
+
+    return res.json({
+      ok: true,
+      dryRun,
+      jobPrefixes,
+      jobs: jobResult.rows.map((job) => ({
+        id: job.id,
+        prefix: job.id.slice(0, 8),
+        status: job.status,
+        requestedCount: Number(job.requested_count || 0),
+        linkedProductCount: linkedResult.rows
+          .filter((row) => row.job_id === job.id)
+          .reduce((sum, row) => sum + Number(row.product_count || 0), 0)
+      })),
+      totalProducts: products.length,
+      categoryCounts,
+      motoCount: categoryCounts["MOTOS & ACESSÓRIOS"] || 0,
+      plannedChanges: changes.length,
+      updatedCount: dryRun ? 0 : appliedCount,
+      products
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao classificar automaticamente lotes Shopee:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Não foi possível classificar os lotes Shopee."
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/integrations/shopee/reclassify-import-job-categories
 // Corrige categorias de um único lote Shopee, preservando preço, imagem e links.
 router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin, async (req, res) => {
