@@ -5,7 +5,7 @@ const SITE_CATEGORIES = [
   'Aparelhos de Som', 'Fones & Headphones', 'Instrumentos Musicais',
   'AUTO & ACESSÓRIOS', 'MOTOS & ACESSÓRIOS', 'Pets', 'Moda Masculina',
   'Moda Feminina', 'Moda Infantil', 'ARMARINHOS & TRICÔ', 'Brinquedos',
-  'TVs', 'Calçados', 'Esportes & Lazer', 'Bike Elétrica e Acessórios',
+  'TVs', 'Calçados Masculino', 'Calçados Femininos', 'Esportes & Lazer', 'Bike Elétrica e Acessórios',
   'Cuidado & Beleza', 'Alimentos & Bebidas'
 ];
 
@@ -69,8 +69,15 @@ const categoryAliases = new Map(Object.entries({
   'pets animals': 'Pets',
   'pet supplies': 'Pets',
   'musical instruments': 'Instrumentos Musicais',
-  'shoes': 'Calçados',
-  'footwear': 'Calçados',
+  'calcados': 'Calçados Masculino',
+  'calcados masculinos': 'Calçados Masculino',
+  'calcados femininos': 'Calçados Femininos',
+  'men shoes': 'Calçados Masculino',
+  'mens shoes': 'Calçados Masculino',
+  'women shoes': 'Calçados Femininos',
+  'womens shoes': 'Calçados Femininos',
+  'shoes': 'Calçados Masculino',
+  'footwear': 'Calçados Masculino',
   'beauty personal care': 'Cuidado & Beleza',
   'personal care': 'Cuidado & Beleza',
   'food beverage': 'Alimentos & Bebidas',
@@ -133,7 +140,12 @@ function inferCategoryFromText(title, description = '') {
   if (/(sofa|mesa de jantar|cadeira|armario|estante|cama|colchao|guarda roupa|comoda|escrivaninha|rack para tv)/.test(text)) return 'Móveis';
   if (/(panela|frigideira|prato|talher|utensilio de cozinha|cozinha|garrafa termica|cafeteira|chaleira|jarra para cafeteira|tacas?|copos?|faqueiros?|pote hermetico)/.test(text)) return 'Casa & Cozinha';
   if (/(furadeira|parafusadeira|kit ferramentas|ferramenta|chave de fenda|alicate|martelo|trena|broca|material de construcao|torneira|tinta|jardinagem)/.test(text)) return 'Ferramentas';
-  if (/(tenis|sandalia|sapato|chinelo|chuteira|bota|calcado|mocassim)/.test(text)) return 'Calçados';
+  if (/\b(tenis|sandalias?|sapatos?|chinelos?|chuteiras?|botas?|botinas?|calcados?|mocassim|mocassins|sapatilhas?|sapatenis|coturnos?|tamancos?|scarpin)\b/.test(text)) {
+    if (/\b(infantil|infantis|bebe|crianca|kids|meninas?|meninos?)\b/.test(text)) return 'Moda Infantil';
+    const feminine = /\b(feminin[oa]s?|mulheres?|women|womens|scarpin|slingback)\b/.test(text);
+    const masculine = /\b(masculin[oa]s?|homem|homens|men|mens|unissex|unisex)\b/.test(text);
+    return feminine && !masculine ? 'Calçados Femininos' : 'Calçados Masculino';
+  }
   if (/(academia|halter|esteira|bicicleta|camping|barraca|esporte|fitness|bola de futebol|raquete|pesca|natacao)/.test(text)) return 'Esportes & Lazer';
   if (/(maquiagem|cosmetico|skincare|perfume|hidratante|beleza|manicure|unhas?|esmalte|gel uv|pinceis|protetor solar)/.test(text)) return 'Cuidado & Beleza';
   if (/(cafe|cha|alimento|bebida|suplemento|chocolate|mantimento|arroz|feijao|azeite)/.test(text)) return 'Alimentos & Bebidas';
@@ -153,6 +165,10 @@ export function resolveShopeeSiteCategory({
   categoryOverride,
   currentCategory
 } = {}) {
+  const selectedFootwear = mapRawCategory(categoryOverride) || mapRawCategory(category);
+  if (selectedFootwear === 'Calçados Masculino' || selectedFootwear === 'Calçados Femininos') {
+    return selectedFootwear;
+  }
   // A clear product title wins over a broad or incorrectly selected import category.
   const titleCategory = inferCategoryFromText(title, '');
   if (titleCategory) return titleCategory;
