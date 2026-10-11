@@ -165,7 +165,10 @@ export function resolveShopeeSiteCategory({
   categoryOverride,
   currentCategory
 } = {}) {
-  const selectedFootwear = mapRawCategory(categoryOverride) || mapRawCategory(category);
+  const declaredFootwear = [categoryOverride, category].find((value) =>
+    ['calcados masculino', 'calcados masculinos', 'calcados femininos', 'men shoes', 'mens shoes', 'women shoes', 'womens shoes'].includes(normalizeKey(value))
+  );
+  const selectedFootwear = mapRawCategory(declaredFootwear);
   if (selectedFootwear === 'Calçados Masculino' || selectedFootwear === 'Calçados Femininos') {
     return selectedFootwear;
   }
