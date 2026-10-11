@@ -411,6 +411,45 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
   }
 });
 
+
+// Correct one explicitly selected product without reimporting its offers.
+router.post("/shopee/reclassify-product-category", requireIntegrationAdmin, async (req, res) => {
+  const productId = String(req.body?.productId || "").trim();
+  const expectedTitle = String(req.body?.expectedTitle || "").trim();
+  const category = normalizeShopeeSiteCategory(req.body?.targetCategory);
+  if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(productId) || !expectedTitle || !category) {
+    return res.status(400).json({ error: "Informe o produto, seu título e uma categoria válida." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const selected = await client.query("SELECT id, title, category FROM products WHERE id=$1 AND source='shopee' FOR UPDATE", [productId]);
+    const product = selected.rows[0];
+    if (!product || product.title !== expectedTitle) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "O produto não corresponde ao título informado." });
+    }
+    if (req.body?.dryRun !== false) {
+      await client.query("ROLLBACK");
+      return res.json({ ok: true, dryRun: true, productId, title: product.title, currentCategory: product.category, targetCategory: category });
+    }
+    await client.query(
+      "UPDATE products SET category=$2::text, metadata=COALESCE(metadata,'{}'::jsonb)||jsonb_build_object('categoryOverride',$2::text),updated_at=now() WHERE id=$1",
+      [productId, category]
+    );
+    await client.query(
+      "UPDATE product_offers SET metadata=COALESCE(metadata,'{}'::jsonb)||jsonb_build_object('categoryOverride',$2::text),updated_at=now() WHERE product_id=$1",
+      [productId, category]
+    );
+    await client.query("COMMIT");
+    return res.json({ ok: true, dryRun: false, productId, title: product.title, category });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao atualizar categoria do produto Shopee:", error);
+    return res.status(500).json({ error: "Não foi possível atualizar a categoria do produto." });
+  } finally { client.release(); }
+});
+
 // POST /api/integrations/shopee/reclassify-import-job-categories
 // Corrige categorias de um único lote Shopee, preservando preço, imagem e links.
 router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin, async (req, res) => {
