@@ -1,3 +1,4 @@
+// Sincronização do classificador seletivo de bordado.
 import { importShopeeFeed } from "../integrations/shopee/feed-importer.js";
 import { importSheinFeed } from "../integrations/shein/feed-importer.js";
 import express from "express";
