@@ -516,11 +516,11 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       [jobIds]
     );
 
-    const accessoryPattern = /\\b(espalhador(?:es)?|queimador(?:es)?|tampinhas?|tampas?\\s+(?:de|do|da)\\s+(?:fogao|cooktop)|interruptor(?:es)?|chicotes?|protetor(?:es)?\\s+(?:de\\s+)?fogao|bacia(?:s)?\\s+queimador|catenaria|pecas?\\s+(?:de|para)\\s+(?:fogao|cooktop)|kit\\s+\\d*\\s*(?:espalhador|queimador|tampinha))/i;
+    const accessoryPattern = /\b(espalhador(?:es)?|queimador(?:es)?|tampinhas?|tampas?\s+(?:de|do|da)\s+(?:fogao|cooktop)|interruptor(?:es)?|chicotes?|protetor(?:es)?\s+(?:de\s+)?fogao|bacia(?:s)?\s+queimador|catenaria|pecas?\s+(?:de|para)\s+(?:fogao|cooktop)|kit\s+\d*\s*(?:espalhador|queimador|tampinha))/i;
 
     const products = productResult.rows.map((row) => {
       const normalizedTitle = String(row.title || "")
-        .normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const isAccessory = row.current_category === "Eletrodomésticos" && accessoryPattern.test(normalizedTitle);
       const suggestedCategory = isAccessory ? "ELETRO & ACESSÓRIOS" : (row.current_category || "Sem categoria");
       const matchedBy = isAccessory ? "acessório de eletrodoméstico" : "sem alteração";
