@@ -1,5 +1,5 @@
 const SITE_CATEGORIES = [
-  'Utilidades', 'Casa & Cozinha', 'CAMA/MESA/BANHO', 'MODA VERÃO PRAIA', 'Ferramentas', 'Eletrodomésticos',
+  'Utilidades', 'Casa & Cozinha', 'CAMA/MESA/BANHO', 'MODA VERÃO PRAIA', 'Ferramentas', 'MÁQUINAS & IMPRESSÃO', 'Eletrodomésticos',
   'ELETRO & ACESSÓRIOS', 'Móveis', 'ELETRÔNICOS', 'RELÓGIOS', 'Games',
   'Computadores', 'Notebook', 'Smartphones', 'Acessórios para celulares',
   'Aparelhos de Som', 'Fones & Headphones', 'Instrumentos Musicais',
@@ -134,6 +134,7 @@ function inferCategoryFromText(title, description = '') {
   if (/(roupa feminina|vestido feminino|blusa feminina|bolsa feminina|lingerie|moda feminina|womens clothing|women clothing)/.test(text)) return 'Moda Feminina';
   if (/(smart ?tv|televisao|televisor|(^| )tv( |$))/.test(text)) return 'TVs';
   if (/(notebook|laptop|chromebook)/.test(text)) return 'Notebook';
+  if (/(impressora|multifuncional|impressao|impressora termica|etiquetadora|rotuladora|plotter|sublimacao|prensa termica|maquina de corte|cortadora|encadernadora|laminadora|plastificadora|bordadeira|maquina de bordado|costura industrial)/.test(text)) return 'MÁQUINAS & IMPRESSÃO';
   if (/(computador|desktop|pc gamer|placa mae|placa de video|memoria ram|monitor para computador|mouse gamer|teclado mecanico)/.test(text)) return 'Computadores';
   if (/(smartphone|celular|iphone|android phone|samsung galaxy|xiaomi redmi|motorola edge)/.test(text)) return 'Smartphones';
   if (/(capa para celular|capinha|pelicula para celular|carregador de celular|acessorio para celular|suporte para celular)/.test(text)) return 'Acessórios para celulares';
