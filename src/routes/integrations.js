@@ -691,7 +691,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
            FROM catalog_import_items ci
            JOIN products p ON p.id = ci.product_id
           WHERE ci.job_id = $1
-            AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
+            AND p.source = 'shopee'              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
         [jobId, targetCategory]
       );
       const matchedCount = Number(matchedResult.rows[0]?.count || 0);
@@ -708,7 +708,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
              FROM catalog_import_items ci
              JOIN products p ON p.id = ci.product_id
             WHERE ci.job_id = $1
-              AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
+              AND p.source = 'shopee'              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
             ORDER BY p.title
             LIMIT 10`,
           [jobId, targetCategory]
@@ -730,7 +730,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
              FROM catalog_import_items ci
              JOIN products p ON p.id = ci.product_id
             WHERE ci.job_id = $1
-              AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
+              AND p.source = 'shopee'              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
          ),
          changed AS (
            UPDATE products p
@@ -761,7 +761,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
           WHERE ci.job_id = $1
             AND po.product_id = p.id
             AND po.platform_id = ap.id
-            AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
+            AND p.source = 'shopee'              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
         [jobId, targetCategory]
       );
 
@@ -777,7 +777,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
            FROM products p
           WHERE ci.job_id = $1
             AND ci.product_id = p.id
-            AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
+            AND p.source = 'shopee'              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
         [jobId, targetCategory]
       );
 
@@ -808,7 +808,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
          FROM catalog_import_items ci
          JOIN products p ON p.id = ci.product_id
          WHERE ci.job_id = $1
-           AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
+           AND p.source = 'shopee'              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
        ),
        changed AS (
          UPDATE products p
