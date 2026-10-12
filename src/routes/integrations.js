@@ -1698,18 +1698,18 @@ router.post("/shopee/reclassify-misplaced-pet-products", requireIntegrationAdmin
   try {
     await client.query("BEGIN");
     const result = await client.query(
-      \`SELECT DISTINCT ON (p.id)
+      `SELECT DISTINCT ON (p.id)
               p.id::text AS product_id, p.title, p.category AS current_category,
               p.metadata, ci.job_id::text AS job_id
          FROM catalog_import_items ci
          JOIN products p ON p.id = ci.product_id
         WHERE p.source = 'shopee' AND p.category = $1 AND ci.product_id IS NOT NULL
-        ORDER BY p.id, ci.created_at DESC\`,
+        ORDER BY p.id, ci.created_at DESC`,
       [sourceCategory]
     );
-    const petPattern = /\\b(gato|gatos|gatinho|gatinha|cachorro|cachorros|pet|pets|arranhador|brinquedo\\s+(?:de\\s+)?gato|mouse\\s+(?:de\\s+)?brinquedo|rato(?:s)?\\s+(?:de|para)\\s+(?:gato|pet)|varinha\\s+(?:para\\s+)?gato|bolinha\\s+(?:para\\s+)?gato)\\b/i;
+    const petPattern = /\b(gato|gatos|gatinho|gatinha|cachorro|cachorros|pet|pets|arranhador|brinquedo\s+(?:de\s+)?gato|mouse\s+(?:de\s+)?brinquedo|rato(?:s)?\s+(?:de|para)\s+(?:gato|pet)|varinha\s+(?:para\s+)?gato|bolinha\s+(?:para\s+)?gato)\b/i;
     const products = result.rows.map((row) => {
-      const normalizedTitle = String(row.title || "").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
+      const normalizedTitle = String(row.title || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const isPet = petPattern.test(normalizedTitle);
       const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
       return {
@@ -1729,28 +1729,28 @@ router.post("/shopee/reclassify-misplaced-pet-products", requireIntegrationAdmin
     if (!dryRun && changes.length) {
       const changesJson = JSON.stringify(changes.map((product) => ({ id: product.productId, category: targetCategory })));
       const updated = await client.query(
-        \`UPDATE products p SET category = changes.category,
+        `UPDATE products p SET category = changes.category,
                 metadata = COALESCE(p.metadata, '{}'::jsonb) || jsonb_build_object('categoryOverride', changes.category),
                 updated_at = now()
            FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
-          WHERE p.id = changes.id AND p.source = 'shopee'\`,
+          WHERE p.id = changes.id AND p.source = 'shopee'`,
         [changesJson]
       );
       updatedCount = updated.rowCount || 0;
       await client.query(
-        \`UPDATE product_offers po SET metadata = COALESCE(po.metadata, '{}'::jsonb) || jsonb_build_object('categoryOverride', changes.category),
+        `UPDATE product_offers po SET metadata = COALESCE(po.metadata, '{}'::jsonb) || jsonb_build_object('categoryOverride', changes.category),
                 updated_at = now()
            FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
            JOIN products p ON p.id = changes.id AND p.source = 'shopee'
-          WHERE po.product_id = p.id\`,
+          WHERE po.product_id = p.id`,
         [changesJson]
       );
       await client.query(
-        \`UPDATE catalog_import_items ci SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
+        `UPDATE catalog_import_items ci SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
                   || jsonb_build_object('global_category1', changes.category, 'category', changes.category, 'categoryOverride', changes.category),
                 updated_at = now()
            FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
-          WHERE ci.product_id = changes.id\`,
+          WHERE ci.product_id = changes.id`,
         [changesJson]
       );
     }
