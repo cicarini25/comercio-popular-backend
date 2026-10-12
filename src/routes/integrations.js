@@ -691,8 +691,8 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
            FROM catalog_import_items ci
            JOIN products p ON p.id = ci.product_id
           WHERE ci.job_id = $1
-            AND ($2 <> 'ARMARINHOS & TRICÔ' OR (p.title ILIKE '%bord%' AND (p.title ILIKE '%linha%' OR p.title ILIKE '%fio%' OR p.title ILIKE '%carretel%' OR p.title ILIKE '%bobina%')))`,
-        [jobId, targetCategory]
+            AND p.source = 'shopee'`,
+        [jobId]
       );
       const matchedCount = Number(matchedResult.rows[0]?.count || 0);
       if (!matchedCount) {
@@ -708,10 +708,10 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
              FROM catalog_import_items ci
              JOIN products p ON p.id = ci.product_id
             WHERE ci.job_id = $1
-            AND ($2 <> 'ARMARINHOS & TRICÔ' OR (p.title ILIKE '%bord%' AND (p.title ILIKE '%linha%' OR p.title ILIKE '%fio%' OR p.title ILIKE '%carretel%' OR p.title ILIKE '%bobina%')))`,
+              AND p.source = 'shopee'
             ORDER BY p.title
             LIMIT 10`,
-          [jobId, targetCategory]
+          [jobId]
         );
         await client.query("ROLLBACK");
         return res.json({
@@ -730,7 +730,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
              FROM catalog_import_items ci
              JOIN products p ON p.id = ci.product_id
             WHERE ci.job_id = $1
-            AND ($2 <> 'ARMARINHOS & TRICÔ' OR (p.title ILIKE '%bord%' AND (p.title ILIKE '%linha%' OR p.title ILIKE '%fio%' OR p.title ILIKE '%carretel%' OR p.title ILIKE '%bobina%')))`,
+              AND p.source = 'shopee'
          ),
          changed AS (
            UPDATE products p
@@ -761,7 +761,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
           WHERE ci.job_id = $1
             AND po.product_id = p.id
             AND po.platform_id = ap.id
-            AND ($2 <> 'ARMARINHOS & TRICÔ' OR (p.title ILIKE '%bord%' AND (p.title ILIKE '%linha%' OR p.title ILIKE '%fio%' OR p.title ILIKE '%carretel%' OR p.title ILIKE '%bobina%')))`,
+            AND p.source = 'shopee'`,
         [jobId, targetCategory]
       );
 
@@ -777,7 +777,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
            FROM products p
           WHERE ci.job_id = $1
             AND ci.product_id = p.id
-            AND ($2 <> 'ARMARINHOS & TRICÔ' OR (p.title ILIKE '%bord%' AND (p.title ILIKE '%linha%' OR p.title ILIKE '%fio%' OR p.title ILIKE '%carretel%' OR p.title ILIKE '%bobina%')))`,
+            AND p.source = 'shopee'`,
         [jobId, targetCategory]
       );
 
@@ -808,7 +808,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
          FROM catalog_import_items ci
          JOIN products p ON p.id = ci.product_id
          WHERE ci.job_id = $1
-            AND ($2 <> 'ARMARINHOS & TRICÔ' OR (p.title ILIKE '%bord%' AND (p.title ILIKE '%linha%' OR p.title ILIKE '%fio%' OR p.title ILIKE '%carretel%' OR p.title ILIKE '%bobina%')))`,
+           AND p.source = 'shopee'
        ),
        changed AS (
          UPDATE products p
@@ -826,7 +826,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
          RETURNING p.id, p.title, p.category
        )
        SELECT id, title, category FROM changed ORDER BY category, title`,
-      [jobId, targetCategory]
+      [jobId]
     );
 
     await client.query(
@@ -849,7 +849,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
               AND lower(p.title) LIKE '%controle%remoto%'
             )
           )`,
-      [jobId, targetCategory]
+      [jobId]
     );
 
     await client.query(
@@ -870,7 +870,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
               AND (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
               AND lower(p.title) LIKE '%controle%remoto%'
           )`,
-      [jobId, targetCategory]
+      [jobId]
     );
 
     await client.query("COMMIT");
