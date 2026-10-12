@@ -1517,5 +1517,104 @@ router.get("/mercadolivre/teste-item", requireIntegrationAdmin, async (_req, res
   }
 });
 
+
+/**
+ * Reclassifica anúncios claramente relacionados a computadores que foram
+ * importados em categorias de origem incorretas.
+ */
+router.post("/shopee/reclassify-misplaced-computer-products", requireIntegrationAdmin, async (req, res) => {
+  const sourceCategories = Array.isArray(req.body?.sourceCategories)
+    ? req.body.sourceCategories.filter((value) => typeof value === "string").map((value) => value.trim()).filter(Boolean)
+    : ["AUTO & ACESSÓRIOS", "Pets"];
+  const targetCategory = "Computadores";
+  const dryRun = req.body?.dryRun !== false;
+  if (!sourceCategories.length || sourceCategories.length > 10) {
+    return res.status(400).json({ error: "Informe as categorias de origem para analisar." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const productResult = await client.query(
+      \`SELECT DISTINCT ON (p.id)
+              p.id::text AS product_id,
+              p.title,
+              p.category AS current_category,
+              p.metadata,
+              ci.job_id::text AS job_id
+         FROM catalog_import_items ci
+         JOIN products p ON p.id = ci.product_id
+        WHERE p.source = 'shopee'
+          AND p.category = ANY($1::text[])
+          AND ci.product_id IS NOT NULL
+        ORDER BY p.id, ci.created_at DESC\`,
+      [sourceCategories]
+    );
+    const computerPattern = /\\b(monitor(?:es)?|desktop|computador(?:es)?|pc\\s*(?:gamer|desktop)?|tela\\s+(?:do|de)\\s+computador|quadro\\s+de\\s+monitor|faixa\\s+de\\s+decoracao\\s+de\\s+monitor|suporte\\s+(?:para|de)\\s+monitor|webcam|teclado|mouse|gabinete)\\b/i;
+    const products = productResult.rows.map((row) => {
+      const normalizedTitle = String(row.title || "")
+        .normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
+      const isComputer = computerPattern.test(normalizedTitle);
+      const suggestedCategory = isComputer ? targetCategory : row.current_category;
+      const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+      const willChange = isComputer && (row.current_category !== targetCategory || metadata.categoryOverride !== targetCategory);
+      return {
+        productId: row.product_id,
+        title: row.title,
+        currentCategory: row.current_category || "Sem categoria",
+        suggestedCategory: suggestedCategory || "Sem categoria",
+        matchedBy: isComputer ? "produto de computador" : "sem alteração",
+        jobId: row.job_id,
+        willChange
+      };
+    });
+    const changes = products.filter((product) => product.willChange);
+    const categoryCounts = products.reduce((counts, product) => {
+      counts[product.suggestedCategory] = (counts[product.suggestedCategory] || 0) + 1;
+      return counts;
+    }, {});
+    let updatedCount = 0;
+    if (!dryRun && changes.length) {
+      const changesJson = JSON.stringify(changes.map((product) => ({ id: product.productId, category: targetCategory })));
+      const updated = await client.query(
+        \`UPDATE products p
+            SET category = changes.category,
+                metadata = COALESCE(p.metadata, '{}'::jsonb) || jsonb_build_object('categoryOverride', changes.category),
+                updated_at = now()
+           FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+          WHERE p.id = changes.id AND p.source = 'shopee'\`,
+        [changesJson]
+      );
+      updatedCount = updated.rowCount || 0;
+      await client.query(
+        \`UPDATE product_offers po
+            SET metadata = COALESCE(po.metadata, '{}'::jsonb) || jsonb_build_object('categoryOverride', changes.category),
+                updated_at = now()
+           FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+           JOIN products p ON p.id = changes.id AND p.source = 'shopee'
+          WHERE po.product_id = p.id\`,
+        [changesJson]
+      );
+      await client.query(
+        \`UPDATE catalog_import_items ci
+            SET normalized_payload = COALESCE(ci.normalized_payload, '{}'::jsonb)
+                  || jsonb_build_object('global_category1', changes.category, 'category', changes.category, 'categoryOverride', changes.category),
+                updated_at = now()
+           FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
+          WHERE ci.product_id = changes.id\`,
+        [changesJson]
+      );
+    }
+    if (dryRun) await client.query("ROLLBACK");
+    else await client.query("COMMIT");
+    return res.json({ ok: true, dryRun, sourceCategories, targetCategory, totalProducts: products.length, categoryCounts, plannedChanges: changes.length, updatedCount: dryRun ? 0 : updatedCount, products });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Erro ao reclassificar produtos de computador:", error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : "Não foi possível reclassificar os produtos." });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
 
