@@ -692,7 +692,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
            JOIN products p ON p.id = ci.product_id
           WHERE ci.job_id = $1
             AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')`,
-        [jobId]
+        [jobId, targetCategory]
       );
       const matchedCount = Number(matchedResult.rows[0]?.count || 0);
       if (!matchedCount) {
@@ -711,7 +711,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
               AND p.source = 'shopee'\n              AND ($2 <> 'ARMARINHOS & TRICÔ' OR p.title ~* '(linha|linhas).{0,60}(bord|bordar|bordado|bordadeira)|(bord|bordar|bordado|bordadeira).{0,60}(linha|linhas)')
             ORDER BY p.title
             LIMIT 10`,
-          [jobId]
+          [jobId, targetCategory]
         );
         await client.query("ROLLBACK");
         return res.json({
@@ -826,7 +826,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
          RETURNING p.id, p.title, p.category
        )
        SELECT id, title, category FROM changed ORDER BY category, title`,
-      [jobId]
+      [jobId, targetCategory]
     );
 
     await client.query(
@@ -849,7 +849,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
               AND lower(p.title) LIKE '%controle%remoto%'
             )
           )`,
-      [jobId]
+      [jobId, targetCategory]
     );
 
     await client.query(
@@ -870,7 +870,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
               AND (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
               AND lower(p.title) LIKE '%controle%remoto%'
           )`,
-      [jobId]
+      [jobId, targetCategory]
     );
 
     await client.query("COMMIT");
