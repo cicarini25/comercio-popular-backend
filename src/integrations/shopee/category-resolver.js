@@ -134,6 +134,7 @@ function inferCategoryFromText(title, description = '') {
   if (/(roupa feminina|vestido feminino|blusa feminina|bolsa feminina|lingerie|moda feminina|womens clothing|women clothing)/.test(text)) return 'Moda Feminina';
   if (/(smart ?tv|televisao|televisor|(^| )tv( |$))/.test(text)) return 'TVs';
   if (/(notebook|laptop|chromebook)/.test(text)) return 'Notebook';
+  if (/(linha(s)?|fio(s)?|carretel|bobina).{0,45}(bord(ar|ado)|bordadeira)|bord(ar|ado).{0,45}(linha|fio|carretel|bobina)/.test(text)) return 'ARMARINHOS & TRICÔ';
   if (/(impressora|multifuncional|impressao|impressora termica|etiquetadora|rotuladora|plotter|sublimacao|prensa termica|maquina de corte|cortadora|encadernadora|laminadora|plastificadora|bordadeira|maquina de bordado|costura industrial)/.test(text)) return 'MÁQUINAS & IMPRESSORAS';
   if (/(computador|desktop|pc gamer|placa mae|placa de video|memoria ram|monitor para computador|mouse gamer|teclado mecanico)/.test(text)) return 'Computadores';
   if (/(smartphone|celular|iphone|android phone|samsung galaxy|xiaomi redmi|motorola edge)/.test(text)) return 'Smartphones';
