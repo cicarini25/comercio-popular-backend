@@ -511,10 +511,16 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
               p.category AS current_category,
               p.metadata,
               ci.job_id::text AS job_id
-         FROM catalog_import_items ci
-         JOIN products p ON p.id = ci.product_id
+         FROM products p
+         LEFT JOIN LATERAL (
+           SELECT ci.job_id
+             FROM catalog_import_items ci
+            WHERE ci.product_id = p.id
+            ORDER BY ci.created_at DESC
+            LIMIT 1
+         ) ci ON TRUE
         WHERE p.source = 'shopee'
-          AND ci.product_id IS NOT NULL
+
           AND (
             ci.job_id = ANY($1::uuid[])
             OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'MÁQUINAS & IMPRESSÃO', 'ARMARINHOS & TRICÔ', 'CALÇADOS INFANTIS M/F', 'Moda Infantil')
