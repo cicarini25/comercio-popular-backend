@@ -517,7 +517,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
           AND ci.product_id IS NOT NULL
           AND (
             ci.job_id = ANY($1::uuid[])
-            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets')
+            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'MÁQUINAS & IMPRESSÃO', 'ARMARINHOS & TRICÔ', 'CALÇADOS INFANTIS M/F', 'Moda Infantil')
           )
         ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
