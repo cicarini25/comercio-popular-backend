@@ -291,9 +291,12 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
               ci.job_id::text AS job_id
          FROM catalog_import_items ci
          JOIN products p ON p.id = ci.product_id
-        WHERE ci.job_id = ANY($1::uuid[])
-          AND p.source = 'shopee'
+        WHERE p.source = 'shopee'
           AND ci.product_id IS NOT NULL
+          AND (
+            ci.job_id = ANY($1::uuid[])
+            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha')
+          )
         ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
     );
