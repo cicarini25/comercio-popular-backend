@@ -519,14 +519,17 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 
     const accessoryPattern = /\b(espalhador(?:es)?|queimador(?:es)?|tampinhas?|tampas?\s+(?:de|do|da)\s+(?:fogao|cooktop)|interruptor(?:es)?|chicotes?|protetor(?:es)?\s+(?:de\s+)?fogao|bacia(?:s)?\s+queimador|catenaria|pecas?\s+(?:de|para)\s+(?:fogao|cooktop)|kit\s+\d*\s*(?:espalhador|queimador|tampinha))/i;
     const embroideryPattern = /\b(linha(?:s)?|fio(?:s)?|carretel|bobina).{0,45}(?:bordar|bordado|bordadeira)|(?:bordar|bordado).{0,45}(?:linha|fio|carretel|bobina)|\b(?:fita(?:s)?|ribbon|ribbons|cetim|agulha(?:s)?|bastidor(?:es)?|gabarito(?:s)?|estabilizador(?:es)?|ponto cruz)\b/i;
+    const machinePattern = /\b(impressora|impressoras|codificador|rotuladora|multifuncional|plotter|impressao|impressão)\b/i;
+    const printerAccessoryPattern = /\b(fita|fitas|ribbon|ribbons|gabarito|adaptador|case|capa|bolsa|suporte|papel|rolo|correia|cinto|compatível|compativel|etiqueta de fita)\b/i;
 
     const products = productResult.rows.map((row) => {
       const normalizedTitle = String(row.title || "")
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const isAccessory = row.current_category === "Eletrodomésticos" && accessoryPattern.test(normalizedTitle);
       const isEmbroidery = embroideryPattern.test(normalizedTitle);
-      const suggestedCategory = isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : (row.current_category || "Sem categoria");
-      const matchedBy = isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha de bordado" : "sem alteração";
+      const isMachine = machinePattern.test(normalizedTitle) && !printerAccessoryPattern.test(normalizedTitle);
+      const suggestedCategory = isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
+      const matchedBy = isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
       const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
       const willChange = row.current_category !== suggestedCategory
         || metadata.categoryOverride !== suggestedCategory;
