@@ -516,7 +516,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
            SELECT ci.job_id
              FROM catalog_import_items ci
             WHERE ci.product_id = p.id
-            ORDER BY ci.created_at DESC
+            ORDER BY ci.id DESC
             LIMIT 1
          ) ci ON TRUE
         WHERE p.source = 'shopee'
