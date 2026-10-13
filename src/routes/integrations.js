@@ -295,7 +295,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
           AND ci.product_id IS NOT NULL
           AND (
             ci.job_id = ANY($1::uuid[])
-            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs')
+            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina')
           )
         ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
@@ -532,8 +532,9 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const isEmbroidery = embroideryPattern.test(normalizedTitle);
       const isMachine = machinePattern.test(normalizedTitle) && !printerAccessoryPattern.test(normalizedTitle);
       const isComputerDisplay = row.current_category === "TVs" && /\\b(monitor|computador|display)\\b/i.test(normalizedTitle);
-      const suggestedCategory = isComputerDisplay ? "Computadores" : isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
-      const matchedBy = isComputerDisplay ? "display de computador" : isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
+      const isSewing = row.current_category === "Moda Feminina" && /\\b(costura|bordado|bordadeira|maquina de costura|máquina de costura)\\b/i.test(normalizedTitle);
+      const suggestedCategory = isComputerDisplay ? "Computadores" : isSewing ? "ARMARINHOS & TRICÔ" : isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
+      const matchedBy = isComputerDisplay ? "display de computador" : isSewing ? "máquina de costura/bordado" : isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
       const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
       const willChange = row.current_category !== suggestedCategory
         || metadata.categoryOverride !== suggestedCategory;
