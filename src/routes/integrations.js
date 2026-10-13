@@ -295,7 +295,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
           AND ci.product_id IS NOT NULL
           AND (
             ci.job_id = ANY($1::uuid[])
-            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha')
+            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs')
           )
         ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
@@ -531,8 +531,9 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const isAccessory = row.current_category === "Eletrodomésticos" && accessoryPattern.test(normalizedTitle);
       const isEmbroidery = embroideryPattern.test(normalizedTitle);
       const isMachine = machinePattern.test(normalizedTitle) && !printerAccessoryPattern.test(normalizedTitle);
-      const suggestedCategory = isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
-      const matchedBy = isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
+      const isComputerDisplay = row.current_category === "TVs" && /\\b(monitor|computador|display)\\b/i.test(normalizedTitle);
+      const suggestedCategory = isComputerDisplay ? "Computadores" : isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
+      const matchedBy = isComputerDisplay ? "display de computador" : isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
       const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
       const willChange = row.current_category !== suggestedCategory
         || metadata.categoryOverride !== suggestedCategory;
