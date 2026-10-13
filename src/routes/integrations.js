@@ -525,7 +525,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 
     const accessoryPattern = /\b(espalhador(?:es)?|queimador(?:es)?|tampinhas?|tampas?\s+(?:de|do|da)\s+(?:fogao|cooktop)|interruptor(?:es)?|chicotes?|protetor(?:es)?\s+(?:de\s+)?fogao|bacia(?:s)?\s+queimador|catenaria|pecas?\s+(?:de|para)\s+(?:fogao|cooktop)|kit\s+\d*\s*(?:espalhador|queimador|tampinha))/i;
         const embroideryPattern = /\b(linha(?:s)?|fio(?:s)?|carretel|bobina).{0,45}(?:bordar|bordado|bordadeira)|(?:bordar|bordado).{0,45}(?:linha|fio|carretel|bobina)|\b(?:fita(?:s)?|ribbon|ribbons|cetim|agulha(?:s)?|bastidor(?:es)?|gabarito(?:s)?|estabilizador(?:es)?|ponto cruz)\b|\b(?:oleo|óleo|spray|lubrificante).{0,45}(?:bordado|bordadeira|costura)\b/i;
-    const machinePattern = /\b(impressora|impressoras|codificador|rotuladora|multifuncional|plotter|impressao|impressão)\b/i;
+    const machinePattern = /\b(impressora|impressoras|codificador|rotuladora|multifuncional|plotter|impressao|impressão|rolo rotativo|gravação a laser|gravacao a laser)\b/i;
     const printerAccessoryPattern = /\b(fita|fitas|ribbon|ribbons|gabarito|adaptador|case|capa|bolsa|suporte|papel|rolo|correia|cinto|compatível|compativel|etiqueta de fita)\b/i;
 
     const products = productResult.rows.map((row) => {
