@@ -295,7 +295,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
           AND ci.product_id IS NOT NULL
           AND (
             ci.job_id = ANY($1::uuid[])
-            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS')
+            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'Moda Infantil')
           )
         ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
@@ -537,7 +537,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const isComputerDisplay = row.current_category === "TVs" && /\\b(monitor|computador|display)\\b/i.test(normalizedTitle);
       const isSewing = row.current_category === "Moda Feminina" && /\\b(costura|bordado|bordadeira|maquina de costura|máquina de costura)\\b/i.test(normalizedTitle);
       const isPetCraft = row.current_category === "Pets" && /\\b(cetim|fita|ribbon|bordado|bordagem|bandagem|linha|bastidor|agulha)\\b/i.test(normalizedTitle);
-      const suggestedCategory = isComputerDisplay ? "Computadores" : isSewing || isPetCraft ? "ARMARINHOS & TRICÔ" : isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
+      const suggestedCategory = isComputerDisplay ? "Computadores" : row.current_category === "Moda Infantil" ? "CALÇADOS INFANTIS M/F" : isSewing || isPetCraft ? "ARMARINHOS & TRICÔ" : isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
       const matchedBy = isComputerDisplay ? "display de computador" : isSewing ? "máquina de costura/bordado" : isPetCraft ? "artesanato em pets" : isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
       const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
       const willChange = row.current_category !== suggestedCategory
