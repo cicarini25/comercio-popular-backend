@@ -539,7 +539,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const isAccessory = row.current_category === "Eletrodomésticos" && accessoryPattern.test(normalizedTitle);
       const isEmbroidery = embroideryPattern.test(normalizedTitle);
-      const isMachine = machinePattern.test(normalizedTitle) && !printerAccessoryPattern.test(normalizedTitle);
+      const isMachine = (machinePattern.test(normalizedTitle) && !printerAccessoryPattern.test(normalizedTitle)) || (row.current_category === "Casa & Cozinha" && /\brolo rotativo\b|\beixo giratorio\b|\beixo giratório\b/i.test(normalizedTitle));
       const isComputerDisplay = row.current_category === "TVs" && /\b(monitor|computador|display)\b/i.test(normalizedTitle);
       const isFurnitureFromTv = row.current_category === "TVs" && /\b(painel|nicho|rack|estante|suporte de tv)\b/i.test(normalizedTitle);
       const isSewing = row.current_category === "Moda Feminina" && /\b(costura|bordado|bordadeira|maquina de costura|máquina de costura)\b/i.test(normalizedTitle);
