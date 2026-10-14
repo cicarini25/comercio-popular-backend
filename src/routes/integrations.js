@@ -286,7 +286,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
       `SELECT DISTINCT ON (p.id)
               p.id::text AS product_id,
               p.title,
-              p.category AS current_category,
+              COALESCE(NULLIF(p.metadata->>'categoryOverride', ''), p.category) AS current_category,
               p.metadata,
               ci.job_id::text AS job_id
          FROM catalog_import_items ci
