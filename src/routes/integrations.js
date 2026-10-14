@@ -512,7 +512,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
               NULL::text AS job_id
          FROM products p
         WHERE p.source = 'shopee'
-          AND p.category IN ('MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA')
+          AND p.category IN ('ARMARINHOS & TRICÔ')
         ORDER BY p.id`
     );
 
@@ -546,7 +546,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const isChildFootwear = /\b(tenis|sapato|sapatos|calcado|calcados|sandalia|sandalias|chinelo|chinelos|bota|botas|sapatilha|sapatilhas|chuteira|chuteiras|mocassim|scarpin)\b/.test(title);
       const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
       const isKitchen = /\b(frigideira|panela|espremedor|saca suco|antiaderente)\b/.test(title);
-      const isWomensClothing = /\b(saia|vestido|cintura|calca jeans)\b/.test(title);
+      const isWomensClothing = /\b(saia|vestido|cintura|calca|camisola|camisa|camiseta|blusa|top|regata|lingerie|sutia|short|bermuda|jaqueta|casaco|pijama|roupa|cropped|conjunto)\b/.test(title);
       let suggestedCategory = currentCategory;
       let matchedBy = "sem alteração";
       if (isTelevision && categoryKey === "computadores") { suggestedCategory = "TVs"; matchedBy = "televisor"; }
@@ -554,6 +554,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isComputerDecoration || (categoryKey === "tvs" && isComputerMonitor)) { suggestedCategory = "Computadores"; matchedBy = "monitor/acessório de computador"; }
       else if (isLaser) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "gravadora/acessório de laser"; }
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
+      else if (isCraftCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário feminino"; }
       else if (isCraftConsumable || (categoryKey === "moda feminina" && /\bcostura\b/.test(title))) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
       else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
       else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }
@@ -567,8 +568,8 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 
     const changes = products.filter((product) =>
       product.willChange &&
-      product.suggestedCategory === 'CALÇADOS INFANTIS M/F' &&
-      ['MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA'].includes(product.currentCategory)
+      product.currentCategory === 'ARMARINHOS & TRICÔ' &&
+      product.suggestedCategory === 'Moda Feminina'
     );
     const categoryCounts = products.reduce((counts, product) => {
       counts[product.suggestedCategory] = (counts[product.suggestedCategory] || 0) + 1;
