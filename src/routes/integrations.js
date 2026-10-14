@@ -507,7 +507,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
     const productResult = await client.query(
       `SELECT p.id::text AS product_id,
               p.title,
-              COALESCE(NULLIF(p.metadata->>'categoryOverride', ''), p.category) AS current_category,
+              p.category AS current_category,
               p.metadata,
               NULL::text AS job_id
          FROM products p
