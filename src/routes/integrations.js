@@ -529,40 +529,51 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       [jobIds]
     );
 
-    const accessoryPattern = /\b(espalhador(?:es)?|queimador(?:es)?|tampinhas?|tampas?\s+(?:de|do|da)\s+(?:fogao|cooktop)|interruptor(?:es)?|chicotes?|protetor(?:es)?\s+(?:de\s+)?fogao|bacia(?:s)?\s+queimador|catenaria|pecas?\s+(?:de|para)\s+(?:fogao|cooktop)|kit\s+\d*\s*(?:espalhador|queimador|tampinha))/i;
-        const embroideryPattern = /\b(linha(?:s)?|fio(?:s)?|carretel|bobina).{0,45}(?:bordar|bordado|bordadeira)|(?:bordar|bordado).{0,45}(?:linha|fio|carretel|bobina)|\b(?:fita(?:s)?|ribbon|ribbons|cetim|agulha(?:s)?|bastidor(?:es)?|gabarito(?:s)?|estabilizador(?:es)?|ponto cruz)\b|\b(?:oleo|óleo|spray|lubrificante).{0,45}(?:bordado|bordadeira|costura)\b/i;
-    const machinePattern = /\b(impressora|impressoras|codificador|rotuladora|multifuncional|plotter|impressao|impressão|rolo rotativo|gravação a laser|gravacao a laser)\b/i;
-    const printerAccessoryPattern = /\b(fita|fitas|ribbon|ribbons|gabarito|adaptador|case|capa|bolsa|suporte|papel|rolo|correia|cinto|compatível|compativel|etiqueta de fita)\b/i;
+    const normalizeText = (value) => String(value || "").normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
     const products = productResult.rows.map((row) => {
-      const normalizedTitle = String(row.title || "")
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const isAccessory = row.current_category === "Eletrodomésticos" && accessoryPattern.test(normalizedTitle);
-      const isEmbroidery = embroideryPattern.test(normalizedTitle);
-      const isMachine = (machinePattern.test(normalizedTitle) && !printerAccessoryPattern.test(normalizedTitle)) || (row.current_category === "Casa & Cozinha" && /\brolo rotativo\b|\beixo giratorio\b|\beixo giratório\b/i.test(normalizedTitle));
-      const isTvInComputers = row.current_category === "Computadores" && /\b(smart\s*tv|tv\s*(?:led|smart)?|televisor|televisao|televisão)\b/i.test(normalizedTitle);
-      const isComputerDisplay = row.current_category === "TVs" && /\b(monitor|computador|display)\b/i.test(normalizedTitle);
-      const isFurnitureFromTv = row.current_category === "TVs" && /\b(painel|nicho|rack|estante|suporte de tv)\b/i.test(normalizedTitle);
-      const isSewing = row.current_category === "Moda Feminina" && /\b(costura|bordado|bordadeira|maquina de costura|máquina de costura)\b/i.test(normalizedTitle);
-      const isPetCraft = row.current_category === "Pets" && /\b(cetim|fita|ribbon|bordado|bordagem|bandagem|linha|bastidor|agulha)\b/i.test(normalizedTitle);
-      const isBoysFashion = row.current_category === "CALÇADOS INFANTIS M/F" && /\b(menino|meninos|masculino|garoto|garotos|camuflagem|unissex|calça infantil|calca infantil|jogger infantil|moletom infantil|roupa|roupas|camisa|camiseta|conjunto|calça|calca|moletom|short|bermuda|hem(i|is)|blusa|vestido|fantasia)\b/i.test(normalizedTitle);
-      const isToolMisplaced = /\b(furadeira|parafusadeira|martelo|chave ajustável|chave ajustavel|lixadeira|ferramenta|ferramentas|enfiar|cordao|cordão|broca|serra elétrica|serra circular|motosserra|kit(?:\s+\d+)?\s*(?:de\s+)?ferramentas|caixa de ferramentas)\b/i.test(normalizedTitle);
-      const isKitchenMisplaced = /\b(frigideira|panela|espremedor|saca suco|cozinha|bife|antiaderente)\b/i.test(normalizedTitle) && (row.current_category === "MÁQUINAS & IMPRESSORAS" || row.current_category === "MÁQUINAS & IMPRESSÃO");
-      const isClothingMisplaced = /\b(saia|vestido|cintura|roupa|calça jeans|calca jeans)\b/i.test(normalizedTitle) && row.current_category === "MÁQUINAS & IMPRESSORAS";
-      const suggestedCategory = isTvInComputers ? "TVs" : isComputerDisplay ? "Computadores" : isFurnitureFromTv ? "Móveis" : row.current_category === "Moda Infantil" ? "CALÇADOS INFANTIS M/F" : isBoysFashion ? "MODA INFANTIL MASCULINA" : isToolMisplaced ? "Ferramentas" : isKitchenMisplaced ? "Casa & Cozinha" : isClothingMisplaced ? "Moda Feminina" : isToolMisplaced && row.current_category === "ARMARINHOS & TRICÔ" ? "Ferramentas" : isSewing || isPetCraft ? "ARMARINHOS & TRICÔ" : isAccessory ? "ELETRO & ACESSÓRIOS" : isEmbroidery ? "ARMARINHOS & TRICÔ" : isMachine ? "MÁQUINAS & IMPRESSORAS" : row.current_category === "MÁQUINAS & IMPRESSÃO" ? "MÁQUINAS & IMPRESSORAS" : (row.current_category || "Sem categoria");
-      const matchedBy = isTvInComputers ? "televisor em Computadores" : isComputerDisplay ? "display de computador" : isBoysFashion ? "moda infantil masculina" : isToolMisplaced ? "ferramenta" : isKitchenMisplaced ? "cozinha" : isClothingMisplaced ? "vestuário" : isSewing ? "máquina de costura/bordado" : isPetCraft ? "artesanato em pets" : isAccessory ? "acessório de eletrodoméstico" : isEmbroidery ? "linha/acessório de bordado" : isMachine ? "impressora ou codificador" : "sem alteração";
-      const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
-      const willChange = row.current_category !== suggestedCategory
-        || metadata.categoryOverride !== suggestedCategory;
-      return {
-        productId: row.product_id,
-        title: row.title,
-        currentCategory: row.current_category || "Sem categoria",
-        suggestedCategory,
-        matchedBy,
-        jobId: row.job_id,
-        willChange
-      };
+      const title = normalizeText(row.title);
+      const currentCategory = row.current_category || "Sem categoria";
+      const categoryKey = normalizeText(currentCategory);
+      const isMachineCategory = /^(maquinas & impressoras|maquinas & impressao)$/.test(categoryKey);
+      const isCraftCategory = categoryKey === "armarinhos & trico";
+      const isChildCategory = categoryKey === "calcados infantis m/f" || categoryKey === "moda infantil";
+      const isTool = /\b(furadeira|parafusadeira|martelo|chave ajustavel|lixadeira|broca|serra eletrica|serra circular|motosserra|ferramenta|ferramentas|caixa de ferramentas)\b/.test(title)
+        || /\bferramenta de enfiar dobravel\b/.test(title)
+        || /\bkit\s*22\/kit\s*9\b/.test(title);
+      const isTelevision = /\b(smart\s*tv|tv\s*(?:led|smart)|televisor|televisao)\b/.test(title);
+      const isTvFurniture = /\b(painel|nicho|rack|estante)\b/.test(title) && /\b(tv|televisao|sala)\b/.test(title);
+      const isComputerDecoration = /\bpudim display\b|\bornamentos\b/.test(title) && /\b(monitor|computador)\b/.test(title);
+      const isComputerMonitor = /\b(monitor|computador|display)\b/.test(title) && !isTelevision && !isTvFurniture;
+      const isLaser = (/\b(gravadora|gravacao|cortadora).{0,35}\blaser\b/.test(title)
+        || /\brolo rotativo\b/.test(title) && /\blaser\b/.test(title)
+        || /\b(sculpfun|artilume|acmer|mecolour|lightburn)\b/.test(title)
+        || /\blente focal\b/.test(title) && /\blaser\b/.test(title)
+        || /\bnema\s*17\b/.test(title) && /\b(impressora|cnc|gravadora)\b/.test(title));
+      const isPrinter = /\b(impressora|impressoras|codificador|rotuladora|plotter)\b/.test(title);
+      const isCraftConsumable = /\b(oleo|spray|lubrificante).{0,65}\b(bordado|bordadeira|costura)\b/.test(title)
+        || /\b(bordado|costura).{0,65}\b(oleo|lubrificante)\b/.test(title)
+        || /\b(etiqueta de fita de cetim|cetim retro|bandagem de bordado|ponto cruz bordado|cal[cç]ador bordado)\b/.test(title)
+        || /\b(linha|linhas|fio|fios|carretel|bobina).{0,45}\b(bordar|bordado|bordadeira)\b/.test(title);
+      const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
+      const isKitchen = /\b(frigideira|panela|espremedor|saca suco|antiaderente)\b/.test(title);
+      const isWomensClothing = /\b(saia|vestido|cintura|calca jeans)\b/.test(title);
+      let suggestedCategory = currentCategory;
+      let matchedBy = "sem alteração";
+      if (isTelevision && categoryKey === "computadores") { suggestedCategory = "TVs"; matchedBy = "televisor"; }
+      else if (isTvFurniture && categoryKey === "tvs") { suggestedCategory = "Móveis"; matchedBy = "painel/rack para TV"; }
+      else if (isComputerDecoration || (categoryKey === "tvs" && isComputerMonitor)) { suggestedCategory = "Computadores"; matchedBy = "monitor/acessório de computador"; }
+      else if (isLaser) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "gravadora/acessório de laser"; }
+      else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
+      else if (isCraftConsumable || (categoryKey === "moda feminina" && /\bcostura\b/.test(title))) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
+      else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
+      else if (isChildCategory && isChildClothing) { suggestedCategory = "MODA INFANTIL MASCULINA"; matchedBy = "roupa infantil"; }
+      else if (isMachineCategory && isKitchen) { suggestedCategory = "Casa & Cozinha"; matchedBy = "utensílio de cozinha"; }
+      else if (isMachineCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário"; }
+      else if (categoryKey === "moda infantil") { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "categoria renomeada"; }
+      else if (categoryKey === "maquinas & impressao") { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "categoria renomeada"; }
+      return { productId: row.product_id, title: row.title, currentCategory, suggestedCategory, matchedBy, jobId: row.job_id, willChange: currentCategory !== suggestedCategory };
     });
 
     const changes = products.filter((product) => product.willChange && product.suggestedCategory !== product.currentCategory);
@@ -627,9 +638,8 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
                   ),
                 updated_at = now()
            FROM jsonb_to_recordset($1::jsonb) AS changes(id uuid, category text)
-          WHERE ci.job_id = ANY($2::uuid[])
-            AND ci.product_id = changes.id`,
-        [changesJson, jobIds]
+          WHERE ci.product_id = changes.id`,
+        [changesJson]
       );
     }
 
