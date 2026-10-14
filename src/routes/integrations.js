@@ -513,8 +513,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
          FROM products p
         WHERE p.source = 'shopee'
           AND p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'MÁQUINAS & IMPRESSÃO', 'ARMARINHOS & TRICÔ', 'CALÇADOS INFANTIS M/F', 'Moda Infantil', 'MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA')
-        ORDER BY p.id`,
-      [jobIds]
+        ORDER BY p.id`
     );
 
     const normalizeText = (value) => String(value || "").normalize("NFD")
@@ -544,7 +543,8 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
         || /\b(bordado|costura).{0,65}\b(oleo|lubrificante)\b/.test(title)
         || /\b(etiqueta de fita de cetim|cetim retro|bandagem de bordado|ponto cruz bordado|cal[cç]ador bordado)\b/.test(title)
         || /\b(linha|linhas|fio|fios|carretel|bobina).{0,45}\b(bordar|bordado|bordadeira)\b/.test(title);
-      const isChildFootwear = /\b(tenis|sapato|sapatos|calcado|calcados|sandalia|sandalias|chinelo|chinelos|bota|botas|sapatilha|sapatilhas|chuteira|chuteiras|mocassim|scarpin)\b/.test(title);\n      const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
+      const isChildFootwear = /\b(tenis|sapato|sapatos|calcado|calcados|sandalia|sandalias|chinelo|chinelos|bota|botas|sapatilha|sapatilhas|chuteira|chuteiras|mocassim|scarpin)\b/.test(title);
+      const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
       const isKitchen = /\b(frigideira|panela|espremedor|saca suco|antiaderente)\b/.test(title);
       const isWomensClothing = /\b(saia|vestido|cintura|calca jeans)\b/.test(title);
       let suggestedCategory = currentCategory;
@@ -556,7 +556,8 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
       else if (isCraftConsumable || (categoryKey === "moda feminina" && /\bcostura\b/.test(title))) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
       else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
-      else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }\n      else if (isChildCategory && isChildClothing) { suggestedCategory = currentCategory; matchedBy = "roupa infantil"; }
+      else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }
+      else if (isChildCategory && isChildClothing) { suggestedCategory = currentCategory; matchedBy = "roupa infantil"; }
       else if (isMachineCategory && isKitchen) { suggestedCategory = "Casa & Cozinha"; matchedBy = "utensílio de cozinha"; }
       else if (isMachineCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário"; }
       else if (categoryKey === "moda infantil") { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "categoria renomeada"; }
