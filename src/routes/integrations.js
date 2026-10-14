@@ -569,6 +569,10 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isMachineCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário"; }
       else if (categoryKey === "moda infantil") { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "categoria renomeada"; }
       else if (categoryKey === "maquinas & impressao") { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "categoria renomeada"; }
+      if (categoryKey === "moda feminina" && isWomensClothing && !isStrongSewingSupply) {
+        suggestedCategory = currentCategory;
+        matchedBy = "roupa feminina";
+      }
       return {
         productId: row.product_id,
         title: row.title,
