@@ -560,7 +560,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isLaser) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "gravadora/acessório de laser"; }
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
       else if (categoryKey === "moda feminina" && isSewingSupply && (!isWomensClothing || isStrongSewingSupply)) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "material de costura/tricô"; }
-      else if (isCraftCategory && (isWomensClothing || isSelectedWomensProduct)) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário feminino"; }
+      else if (isCraftCategory && ((isWomensClothing && !isStrongSewingSupply) || isSelectedWomensProduct)) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário feminino"; }
       else if (isCraftConsumable && !(categoryKey === "moda feminina" && isWomensClothing)) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
       else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
       else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }
