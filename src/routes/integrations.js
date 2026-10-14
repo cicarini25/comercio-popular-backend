@@ -548,6 +548,9 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const isKitchen = /\b(frigideira|panela|espremedor|saca suco|antiaderente)\b/.test(title);
       const isWomensClothing = /\b(saias?|vestidos?|cintura|cal[cç]as?|camisolas?|camisas?|camisetas?|blusas?|tops?|regatas?|lingeries?|suti[aã]s?|shorts?|bermudas?|jaquetas?|casacos?|pijamas?|roupas?|croppeds?|conjuntos?|macac[aã]os?|body|bodys|coletes?|sobretudos?)\b/.test(title);
       const isSewingSupply = /\b(agulhas?|linhas?|fios?|carreteis?|bobinas?|botoes?|ziperes?|alfinetes?|alicates?|calcadores?|tesouras?|el[aá]sticos?|snaps|press[aã]o|croch[eê]|tric[oô]t|tric[oô]|maquina de costura|p[eé]s de maquina|patchwork|patches?|remendos?|ilh[oó]s|rebites?|fita de cetim|fita de renda|acessorios de renda)\b/.test(title);
+      const isStrongSewingSupply = /\b(agulhas?|linhas?|fios?|carreteis?|bobinas?|ziperes?|alfinetes?|alicates?|calcadores?|tesouras?|el[aá]sticos?|snaps|pressao|croche|tricot|trico|maquina de costura|pes de maquina|patchwork|patches?|remendos?|ilhos|rebites?)\b/.test(title)
+        || /\b(botoes?|ziperes?)\b.{0,35}\b(costura|snaps|pressao)\b/.test(title)
+        || /\b(costura)\b.{0,35}\b(agulha|linha|ziper|calcador|maquina)\b/.test(title);
       const isSelectedWomensProduct = /^(bonito maca xadrez renda costura oco chapeu feminino|atmosfera renda azul marinho pequeno floral terno feminino|cetim pena punhos renda costura camisola|luz de luxo quarto privado renda costura camisola|europeu europeu americano feminino puro desejo henry|outono inverno veludo renda costura estilingue camisola feminina|senhoras verao camisola 2026|novo estilo camisola feminina estilo com decote|camisola fresca pequena floral contraste cor renda costura|saia de bolo com costura de renda francesa|woodpecker jaqueta de la acolchoada jaqueta feminina|primavera outono camisola feminina algodao doce)/.test(title);
       let suggestedCategory = currentCategory;
       let matchedBy = "sem alteração";
@@ -556,9 +559,9 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isComputerDecoration || (categoryKey === "tvs" && isComputerMonitor)) { suggestedCategory = "Computadores"; matchedBy = "monitor/acessório de computador"; }
       else if (isLaser) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "gravadora/acessório de laser"; }
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
-      else if (categoryKey === "moda feminina" && isSewingSupply) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "material de costura/tricô"; }
+      else if (categoryKey === "moda feminina" && isSewingSupply && (!isWomensClothing || isStrongSewingSupply)) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "material de costura/tricô"; }
       else if (isCraftCategory && (isWomensClothing || isSelectedWomensProduct)) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário feminino"; }
-      else if (isCraftConsumable || (categoryKey === "moda feminina" && /\bcostura\b/.test(title))) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
+      else if (isCraftConsumable && !(categoryKey === "moda feminina" && isWomensClothing)) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
       else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
       else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }
       else if (isChildCategory && isChildClothing) { suggestedCategory = currentCategory; matchedBy = "roupa infantil"; }
