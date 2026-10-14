@@ -505,26 +505,14 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 
     const jobIds = jobResult.rows.map((job) => job.id);
     const productResult = await client.query(
-      `SELECT DISTINCT ON (p.id)
-              p.id::text AS product_id,
+      `SELECT p.id::text AS product_id,
               p.title,
               p.category AS current_category,
               p.metadata,
-              ci.job_id::text AS job_id
+              NULL::text AS job_id
          FROM products p
-         LEFT JOIN LATERAL (
-           SELECT ci.job_id
-             FROM catalog_import_items ci
-            WHERE ci.product_id = p.id
-            ORDER BY ci.id DESC
-            LIMIT 1
-         ) ci ON TRUE
         WHERE p.source = 'shopee'
-
-          AND (
-            ci.job_id = ANY($1::uuid[])
-            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'MÁQUINAS & IMPRESSÃO', 'ARMARINHOS & TRICÔ', 'CALÇADOS INFANTIS M/F', 'Moda Infantil')
-          )
+          AND p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'MÁQUINAS & IMPRESSÃO', 'ARMARINHOS & TRICÔ', 'CALÇADOS INFANTIS M/F', 'Moda Infantil', 'MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA')
         ORDER BY p.id`,
       [jobIds]
     );
@@ -538,7 +526,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const categoryKey = normalizeText(currentCategory);
       const isMachineCategory = /^(maquinas & impressoras|maquinas & impressao)$/.test(categoryKey);
       const isCraftCategory = categoryKey === "armarinhos & trico";
-      const isChildCategory = categoryKey === "calcados infantis m/f" || categoryKey === "moda infantil";
+      const isChildCategory = ["calcados infantis m/f", "moda infantil", "moda infantil feminina", "moda infantil masculina"].includes(categoryKey);
       const isTool = /\b(furadeira|parafusadeira|martelo|chave ajustavel|lixadeira|broca|serra eletrica|serra circular|motosserra|ferramenta|ferramentas|caixa de ferramentas)\b/.test(title)
         || /\bferramenta de enfiar dobravel\b/.test(title)
         || /\bkit\s*22\/kit\s*9\b/.test(title);
@@ -556,7 +544,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
         || /\b(bordado|costura).{0,65}\b(oleo|lubrificante)\b/.test(title)
         || /\b(etiqueta de fita de cetim|cetim retro|bandagem de bordado|ponto cruz bordado|cal[cç]ador bordado)\b/.test(title)
         || /\b(linha|linhas|fio|fios|carretel|bobina).{0,45}\b(bordar|bordado|bordadeira)\b/.test(title);
-      const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
+      const isChildFootwear = /\b(tenis|sapato|sapatos|calcado|calcados|sandalia|sandalias|chinelo|chinelos|bota|botas|sapatilha|sapatilhas|chuteira|chuteiras|mocassim|scarpin)\b/.test(title);\n      const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
       const isKitchen = /\b(frigideira|panela|espremedor|saca suco|antiaderente)\b/.test(title);
       const isWomensClothing = /\b(saia|vestido|cintura|calca jeans)\b/.test(title);
       let suggestedCategory = currentCategory;
@@ -568,7 +556,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
       else if (isCraftConsumable || (categoryKey === "moda feminina" && /\bcostura\b/.test(title))) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
       else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
-      else if (isChildCategory && isChildClothing) { suggestedCategory = "MODA INFANTIL MASCULINA"; matchedBy = "roupa infantil"; }
+      else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }\n      else if (isChildCategory && isChildClothing) { suggestedCategory = currentCategory; matchedBy = "roupa infantil"; }
       else if (isMachineCategory && isKitchen) { suggestedCategory = "Casa & Cozinha"; matchedBy = "utensílio de cozinha"; }
       else if (isMachineCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário"; }
       else if (categoryKey === "moda infantil") { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "categoria renomeada"; }
