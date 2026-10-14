@@ -512,7 +512,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
               NULL::text AS job_id
          FROM products p
         WHERE p.source = 'shopee'
-          AND p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'MÁQUINAS & IMPRESSÃO', 'ARMARINHOS & TRICÔ', 'CALÇADOS INFANTIS M/F', 'Moda Infantil', 'MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA')
+          AND p.category IN ('MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA')
         ORDER BY p.id`
     );
 
@@ -565,7 +565,11 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       return { productId: row.product_id, title: row.title, currentCategory, suggestedCategory, matchedBy, jobId: row.job_id, willChange: currentCategory !== suggestedCategory };
     });
 
-    const changes = products.filter((product) => product.willChange && product.suggestedCategory !== product.currentCategory);
+    const changes = products.filter((product) =>
+      product.willChange &&
+      product.suggestedCategory === 'CALÇADOS INFANTIS M/F' &&
+      ['MODA INFANTIL FEMININA', 'MODA INFANTIL MASCULINA'].includes(product.currentCategory)
+    );
     const categoryCounts = products.reduce((counts, product) => {
       counts[product.suggestedCategory] = (counts[product.suggestedCategory] || 0) + 1;
       return counts;
