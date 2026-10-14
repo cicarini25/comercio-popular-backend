@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 const router = express.Router();
 
 const DEFAULT_LIMIT = 24;
-const MAX_LIMIT = 50;
+const MAX_LIMIT = 60;
 const CATEGORY_SQL = "CASE WHEN lower(COALESCE(p.metadata->>'categoryOverride', '')) = 'armarinhos & tricô' AND lower(COALESCE(p.title, '')) ~ '(saia|vestido|camisa|camiseta|blusa|top|regata|lingerie|sutiã|short|bermuda|jaqueta|casaco|pijama|roupa|cropped|conjunto|macacão|body|colete|sobretudo)' AND lower(COALESCE(p.title, '')) !~ '(agulha|linha|carretel|bobina|crochê|tricô|zíper|calcador|tesoura|patchwork|remendo|fita de (cetim|renda)|botão de costura)' THEN 'Moda Feminina' WHEN NULLIF(p.metadata->>'categoryOverride', '') IS NOT NULL THEN p.metadata->>'categoryOverride' WHEN lower(COALESCE(p.title, '')) ~ '(armário|armario|estante|guarda.?roupa|cômoda|comoda|rack|mesa de jantar|sofá|sofa|cama|colchão|colchao)' THEN 'Móveis' ELSE p.category END";
 
 function parseNonNegativeInt(value, fallback) {
