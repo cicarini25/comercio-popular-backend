@@ -547,6 +547,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       const isChildClothing = /\b(calca|calcas|moletom|roupa|roupas|camisa|camiseta|conjunto|short|bermuda|blusa|fantasia)\b/.test(title);
       const isKitchen = /\b(frigideira|panela|espremedor|saca suco|antiaderente)\b/.test(title);
       const isWomensClothing = /\b(saia|vestido|cintura|calca|camisola|camisa|camiseta|blusa|top|regata|lingerie|sutia|short|bermuda|jaqueta|casaco|pijama|roupa|cropped|conjunto)\b/.test(title);
+      const isSelectedWomensProduct = /^(bonito maca xadrez renda costura oco chapeu feminino|atmosfera renda azul marinho pequeno floral terno feminino|cetim pena punhos renda costura camisola|luz de luxo quarto privado renda costura camisola|europeu europeu americano feminino puro desejo henry|outono inverno veludo renda costura estilingue camisola feminina|senhoras verao camisola 2026|novo estilo camisola feminina estilo com decote|camisola fresca pequena floral contraste cor renda costura|saia de bolo com costura de renda francesa|woodpecker jaqueta de la acolchoada jaqueta feminina|primavera outono camisola feminina algodao doce)/.test(title);
       let suggestedCategory = currentCategory;
       let matchedBy = "sem alteração";
       if (isTelevision && categoryKey === "computadores") { suggestedCategory = "TVs"; matchedBy = "televisor"; }
@@ -554,7 +555,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isComputerDecoration || (categoryKey === "tvs" && isComputerMonitor)) { suggestedCategory = "Computadores"; matchedBy = "monitor/acessório de computador"; }
       else if (isLaser) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "gravadora/acessório de laser"; }
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
-      else if (isCraftCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário feminino"; }
+      else if (isCraftCategory && (isWomensClothing || isSelectedWomensProduct)) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário feminino"; }
       else if (isCraftConsumable || (categoryKey === "moda feminina" && /\bcostura\b/.test(title))) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "bordado/costura"; }
       else if (isPrinter && (isMachineCategory || ["ferramentas","computadores","smartphones"].includes(categoryKey))) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "impressora/codificador"; }
       else if (isChildCategory && isChildFootwear) { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "calçado infantil"; }
@@ -563,7 +564,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       else if (isMachineCategory && isWomensClothing) { suggestedCategory = "Moda Feminina"; matchedBy = "vestuário"; }
       else if (categoryKey === "moda infantil") { suggestedCategory = "CALÇADOS INFANTIS M/F"; matchedBy = "categoria renomeada"; }
       else if (categoryKey === "maquinas & impressao") { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "categoria renomeada"; }
-      return { productId: row.product_id, title: row.title, currentCategory, suggestedCategory, matchedBy, jobId: row.job_id, willChange: currentCategory !== suggestedCategory };
+      return { productId: row.product_id, title: row.title, currentCategory, suggestedCategory, matchedBy, jobId: row.job_id, willChange: isSelectedWomensProduct && currentCategory !== suggestedCategory };
     });
 
     const changes = products.filter((product) =>
