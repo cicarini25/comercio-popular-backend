@@ -40,7 +40,32 @@ router.post('/', requireAuth, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+    const productIds = [...new Set(items.map((item) => item.productId).filter((id) => /^[0-9a-f-]{36}$/i.test(String(id))))];
+    if (productIds.length !== new Set(items.map((item) => item.productId)).size) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Há um produto inválido no pedido.' });
+    }
+    const productResult = await client.query(
+      `SELECT p.id, p.title, p.price, p.stock_units, p.seller_id, p.status
+         FROM products p
+        WHERE p.id = ANY($1::uuid[]) AND p.source = 'proprio'
+        FOR UPDATE`,
+      [productIds],
+    );
+    const productsById = new Map(productResult.rows.map((product) => [String(product.id), product]));
+    const canonicalItems = items.map((item) => {
+      const product = productsById.get(String(item.productId));
+      if (!product || String(product.seller_id) !== String(sellerIds[0]) || product.status !== 'ativo') return null;
+      if (Number(product.stock_units) < Number(item.quantity)) return null;
+      if (Number(product.price).toFixed(2) !== Number(item.unitPrice).toFixed(2)) return null;
+      return { ...item, title: product.title, unitPrice: Number(product.price), sellerId: product.seller_id };
+    });
+    if (canonicalItems.some((item) => !item)) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Um produto mudou de preço, estoque ou disponibilidade. Atualize a sacola.' });
+    }
+
+    const subtotal = canonicalItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
     const total = subtotal + normalizedShippingFee;
 
     const orderResult = await client.query(
@@ -51,7 +76,7 @@ router.post('/', requireAuth, async (req, res) => {
     );
     const orderId = orderResult.rows[0].id;
 
-    for (const item of items) {
+    for (const item of canonicalItems) {
       await client.query(
         `INSERT INTO order_items (order_id, product_id, seller_id, title, unit_price, quantity)
          VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -63,7 +88,7 @@ router.post('/', requireAuth, async (req, res) => {
     const preference = new Preference(mpClient);
     const mpResponse = await preference.create({
       body: {
-        items: items.map((i) => ({
+        items: canonicalItems.map((i) => ({
           title: i.title,
           quantity: i.quantity,
           unit_price: Number(i.unitPrice),
