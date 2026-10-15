@@ -348,3 +348,18 @@ CREATE INDEX IF NOT EXISTS idx_mercadolivre_notifications_user
 
 CREATE INDEX IF NOT EXISTS idx_mercadolivre_notifications_processed
   ON mercadolivre_notifications(processed_at);
+
+
+-- Verificação de telefone por SMS (OTP)
+CREATE TABLE IF NOT EXISTS sms_verification_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  phone VARCHAR(20) NOT NULL,
+  code_hash VARCHAR(128) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts SMALLINT NOT NULL DEFAULT 0,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sms_codes_user_created ON sms_verification_codes(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sms_codes_expiry ON sms_verification_codes(expires_at);
