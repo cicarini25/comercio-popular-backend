@@ -18,6 +18,11 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'O carrinho está vazio.' });
   }
 
+  const sellerIds = [...new Set(items.map((item) => item.sellerId).filter(Boolean))];
+  if (sellerIds.length !== 1 || items.some((item) => !item.sellerId)) {
+    return res.status(400).json({ error: 'Cada pedido deve conter produtos de um único vendedor.' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
