@@ -18,18 +18,36 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'O carrinho está vazio.' });
   }
 
+  if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+    return res.status(503).json({ error: 'Pagamento ainda não configurado no servidor.' });
+  }
+
+  const normalizedShippingFee = Number(shippingFee);
+  if (!Number.isFinite(normalizedShippingFee) || normalizedShippingFee < 0) {
+    return res.status(400).json({ error: 'Valor de frete inválido.' });
+  }
+
+  if (items.some((item) => !Number.isFinite(Number(item.unitPrice)) || Number(item.unitPrice) < 0 || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1)) {
+    return res.status(400).json({ error: 'Há um item com preço ou quantidade inválidos.' });
+  }
+
+  const sellerIds = [...new Set(items.map((item) => item.sellerId).filter(Boolean))];
+  if (sellerIds.length !== 1 || items.some((item) => !item.sellerId)) {
+    return res.status(400).json({ error: 'Cada pedido deve conter produtos de um único vendedor.' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-    const total = subtotal + Number(shippingFee);
+    const total = subtotal + normalizedShippingFee;
 
     const orderResult = await client.query(
       `INSERT INTO orders (user_id, subtotal, shipping_fee, total, status)
        VALUES ($1, $2, $3, $4, 'aguardando_pagamento')
        RETURNING id`,
-      [req.userId, subtotal, shippingFee, total]
+      [req.userId, subtotal, normalizedShippingFee, total]
     );
     const orderId = orderResult.rows[0].id;
 
@@ -52,7 +70,7 @@ router.post('/', requireAuth, async (req, res) => {
           currency_id: 'BRL'
         })),
         shipments: {
-          cost: Number(shippingFee),
+          cost: normalizedShippingFee,
           mode: 'not_specified'
         },
         external_reference: orderId,
@@ -138,3 +156,4 @@ router.post('/webhook/mercadopago', async (req, res) => {
 });
 
 export default router;
+
