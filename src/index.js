@@ -10,11 +10,32 @@ import catalogRoutes from './routes/catalog.js';
 import integrationRoutes from './routes/integrations.js';
 import shopeeImageRoutes from './routes/shopee-images.js';
 import { completeMercadoLivreOAuth } from './integrations/mercadolivre/oauth.js';
+import { authRateLimit } from './middleware/auth-rate-limit.js';
 
 const app = express();
 
-app.use(cors());
+app.set('trust proxy', 1);
+const allowedOrigins = new Set(
+  (process.env.FRONTEND_ORIGINS || process.env.FRONTEND_URL || 'https://comerciopopular.shop,http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
+
+app.use(cors({
+  credentials: true,
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) return callback(null, true);
+    return callback(new Error('Origem não autorizada.'));
+  },
+}));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '25mb' }));
+
+app.use('/api/auth', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 
 app.get('/', async (req, res) => {
   if (req.query.code || req.query.error) {
@@ -42,6 +63,12 @@ app.get('/', async (req, res) => {
   return res.json({ status: 'ok', service: 'Comércio Popular API' });
 });
 
+app.use('/api/auth/login', authRateLimit);
+app.use('/api/auth/signup', authRateLimit);
+app.use('/api/auth/google', authRateLimit);
+app.use('/api/auth/facebook', authRateLimit);
+app.use('/api/auth/tiktok/exchange', authRateLimit);
+app.use('/api/auth/legal/accept', authRateLimit);
 app.use('/api/auth/facebook', facebookRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/auth/legal', legalRoutes);
