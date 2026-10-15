@@ -76,15 +76,11 @@ router.get('/dashboard', async (req, res) => {
         [req.seller.id],
       ),
       pool.query(
-        `SELECT COUNT(DISTINCT o.id)::int AS sales_count,
-                COALESCE(SUM(CASE WHEN o.status IN ('pago','em_preparacao','enviado','entregue') THEN oi.unit_price * oi.quantity ELSE 0 END), 0)::numeric AS revenue,
-                COUNT(DISTINCT o.id) FILTER (WHERE o.status IN ('pago','em_preparacao'))::int AS open_orders,
-                COUNT(*) FILTER (WHERE p.status = 'ativo')::int AS active_products
-           FROM sellers s
-           LEFT JOIN products p ON p.seller_id = s.id AND p.source = 'proprio'
-           LEFT JOIN order_items oi ON oi.seller_id = s.id
-           LEFT JOIN orders o ON o.id = oi.order_id
-          WHERE s.id = $1`,
+        `SELECT
+            (SELECT COUNT(DISTINCT oi.order_id)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE oi.seller_id = $1 AND o.status IN ('pago','em_preparacao','enviado','entregue')) AS sales_count,
+            (SELECT COALESCE(SUM(oi.unit_price * oi.quantity), 0)::numeric FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE oi.seller_id = $1 AND o.status IN ('pago','em_preparacao','enviado','entregue')) AS revenue,
+            (SELECT COUNT(DISTINCT oi.order_id)::int FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE oi.seller_id = $1 AND o.status IN ('pago','em_preparacao')) AS open_orders,
+            (SELECT COUNT(*)::int FROM products WHERE seller_id = $1 AND source = 'proprio' AND status = 'ativo') AS active_products`,
         [req.seller.id],
       ),
     ]);
