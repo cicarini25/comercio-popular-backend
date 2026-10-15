@@ -363,3 +363,35 @@ CREATE TABLE IF NOT EXISTS sms_verification_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_sms_codes_user_created ON sms_verification_codes(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sms_codes_expiry ON sms_verification_codes(expires_at);
+
+
+-- Cadastros de comerciantes aguardando análise administrativa.
+CREATE TABLE IF NOT EXISTS merchant_applications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  plan VARCHAR(50) NOT NULL,
+  entity_type VARCHAR(2) NOT NULL CHECK (entity_type IN ('PF', 'PJ')),
+  store_name VARCHAR(150) NOT NULL,
+  legal_name VARCHAR(180) NOT NULL,
+  business_activity VARCHAR(180) NOT NULL,
+  street VARCHAR(180) NOT NULL,
+  address_number VARCHAR(30) NOT NULL,
+  neighborhood VARCHAR(120) NOT NULL,
+  cep VARCHAR(12) NOT NULL,
+  city VARCHAR(100) NOT NULL,
+  state VARCHAR(2) NOT NULL,
+  phone VARCHAR(25) NOT NULL,
+  email VARCHAR(150) NOT NULL,
+  document_number VARCHAR(18) NOT NULL,
+  website VARCHAR(220),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  review_notes TEXT,
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_merchant_applications_user ON merchant_applications(user_id);
+CREATE INDEX IF NOT EXISTS idx_merchant_applications_status ON merchant_applications(status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_merchant_applications_pending_document ON merchant_applications(document_number) WHERE status = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_sellers_user ON sellers(user_id);
