@@ -28,6 +28,13 @@ function issueToken(userId) {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
 }
 
+function smsVerificationConfigured() {
+  return Boolean(
+    (process.env.ZENVIA_API_TOKEN || process.env.ZENVIA_TOKEN)
+    && (process.env.ZENVIA_SMS_FROM || process.env.ZENVIA_SMS_SENDER),
+  );
+}
+
 async function ensureSocialSchema() {
   await pool.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;');
   await pool.query('ALTER TABLE users ALTER COLUMN email DROP NOT NULL;');
@@ -69,7 +76,7 @@ router.post('/signup', async (req, res) => {
 
     const user = result.rows[0];
     const token = issueToken(user.id);
-    res.status(201).json({ user, token });
+    res.status(201).json({ user, token, smsVerificationRequired: smsVerificationConfigured() && Boolean(user.phone) && user.is_verified_sms !== true });
   } catch (err) {
     console.error('Erro no cadastro:', err);
     res.status(500).json({ error: 'Erro ao criar conta. Tente novamente.' });
@@ -98,7 +105,7 @@ router.post('/login', async (req, res) => {
 
     const token = issueToken(user.id);
     delete user.password_hash;
-    res.json({ user, token });
+    res.json({ user, token, smsVerificationRequired: smsVerificationConfigured() && Boolean(user.phone) && user.is_verified_sms !== true });
   } catch (err) {
     console.error('Erro no login:', err);
     res.status(500).json({ error: 'Erro ao entrar na conta. Tente novamente.' });
