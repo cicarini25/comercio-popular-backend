@@ -7,8 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 const router = express.Router();
 
 const DEFAULT_LIMIT = 24;
-const MAX_LIMIT = 60;
-const CATEGORY_SQL = "CASE WHEN lower(COALESCE(p.metadata->>'categoryOverride', '')) = 'armarinhos & tricô' AND lower(COALESCE(p.title, '')) ~ '(saia|vestido|camisa|camiseta|blusa|top|regata|lingerie|sutiã|short|bermuda|jaqueta|casaco|pijama|roupa|cropped|conjunto|macacão|body|colete|sobretudo)' AND lower(COALESCE(p.title, '')) !~ '(agulha|linha|carretel|bobina|crochê|tricô|zíper|calcador|tesoura|patchwork|remendo|fita de (cetim|renda)|botão de costura)' THEN 'Moda Feminina' WHEN NULLIF(p.metadata->>'categoryOverride', '') IS NOT NULL THEN p.metadata->>'categoryOverride' WHEN lower(COALESCE(p.title, '')) ~ '(armário|armario|estante|guarda.?roupa|cômoda|comoda|rack|mesa de jantar|sofá|sofa|cama|colchão|colchao)' THEN 'Móveis' ELSE p.category END";
+const MAX_LIMIT = 100;
 
 function parseNonNegativeInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -23,6 +22,7 @@ function sanitizeLimit(value) {
 // GET /api/catalog/products
 // Catálogo público: não expõe affiliate_url/product_url diretamente.
 router.get('/products', async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : '';
   const platform = typeof req.query.platform === 'string' ? req.query.platform.trim().toLowerCase() : '';
@@ -43,7 +43,7 @@ router.get('/products', async (req, res) => {
 
   if (category) {
     values.push(category);
-    where.push(`${CATEGORY_SQL} = $${values.length}`);
+    where.push(`p.category = $${values.length}`);
   }
 
   if (platform) {
@@ -71,8 +71,7 @@ router.get('/products', async (req, res) => {
          p.description,
          p.price,
          p.image_url,
-         ${CATEGORY_SQL} AS category,
-         p.metadata->>'categoryOverride' AS category_override,
+         p.category,
          p.brand,
          p.ean,
          p.slug,
@@ -141,8 +140,7 @@ router.get('/products/:id', async (req, res) => {
          p.description,
          p.price,
          p.image_url,
-         ${CATEGORY_SQL} AS category,
-         p.metadata->>'categoryOverride' AS category_override,
+         p.category,
          p.brand,
          p.ean,
          p.slug,
@@ -249,3 +247,4 @@ router.get('/offers/:id/go', requireAuth, async (req, res) => {
 });
 
 export default router;
+
