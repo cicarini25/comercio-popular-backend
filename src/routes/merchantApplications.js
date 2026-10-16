@@ -286,6 +286,26 @@ function requireAdmin(req, res, next) {
   }).catch(() => res.status(500).json({ error: 'Não foi possível validar o administrador.' }));
 }
 
+router.get('/admin', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      `SELECT id, plan, entity_type, store_name, legal_name, business_activity,
+              street, address_number, neighborhood, cep, city, state, phone, email,
+              document_number, website, status, payment_status, payment_url,
+              review_notes, created_at, approved_at, paid_at
+         FROM merchant_applications
+        WHERE status IN ('pending', 'approved_waiting_payment', 'paid', 'rejected')
+        ORDER BY created_at DESC
+        LIMIT 200`,
+    );
+    return res.json({ applications: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar cadastros para análise:', error);
+    return res.status(500).json({ error: 'Não foi possível carregar os cadastros.' });
+  }
+});
+
 router.patch('/:id/review', requireAuth, requireAdmin, async (req, res) => {
   const status = req.body?.status === 'approved' ? 'approved' : req.body?.status === 'rejected' ? 'rejected' : null;
   if (!status) return res.status(400).json({ error: 'Informe status approved ou rejected.' });

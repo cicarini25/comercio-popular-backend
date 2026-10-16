@@ -175,5 +175,25 @@ router.delete('/products/:id', async (req, res) => {
   }
 });
 
+router.patch('/orders/:id', async (req, res) => {
+  const allowedStatuses = ['pago', 'em_preparacao', 'enviado', 'entregue', 'cancelado'];
+  const status = allowedStatuses.includes(req.body?.status) ? req.body.status : null;
+  const trackingCode = clean(req.body?.trackingCode, 80) || null;
+  if (!status) return res.status(400).json({ error: 'Status de pedido inválido.' });
+  try {
+    const result = await pool.query(
+      `UPDATE orders SET status = $1, tracking_code = COALESCE($2, tracking_code), updated_at = now()
+        WHERE id = $3 AND EXISTS (SELECT 1 FROM order_items WHERE order_id = orders.id AND seller_id = $4)
+        RETURNING id, status, tracking_code`,
+      [status, trackingCode, req.params.id, req.seller.id],
+    );
+    if (result.rowCount !== 1) return res.status(404).json({ error: 'Pedido não encontrado para esta loja.' });
+    return res.json({ order: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar pedido do vendedor:', error);
+    return res.status(500).json({ error: 'Não foi possível atualizar o pedido.' });
+  }
+});
+
 export default router;
 
