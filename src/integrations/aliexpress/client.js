@@ -2,7 +2,8 @@ import crypto from "crypto";
 import { MarketplaceConnector } from "../core/connector.js";
 import { normalizeGtin, normalizeText } from "../core/normalizer.js";
 
-const DEFAULT_ENDPOINT = "https://api-sg.aliexpress.com/rest";
+// The current affiliate product API documentation lists the TOP router for affiliate calls. Seller APIs use a different Open Platform endpoint.
+const DEFAULT_ENDPOINT = "https://eco.taobao.com/router/rest";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 50;
 
