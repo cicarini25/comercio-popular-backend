@@ -22,7 +22,7 @@ function affiliateResponse(product = sampleProduct) {
     aliexpress_affiliate_product_query_response: {
       resp_result: {
         resp_code: 200,
-        resp_msg: "success",
+        resp_msg: "Call succeeds",
         result: {
           current_page_no: 2,
           current_record_count: 1,

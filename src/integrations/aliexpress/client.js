@@ -195,7 +195,7 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
     const result = extractAffiliateResult(parsed);
     const responseCode = Number(envelope?.resp_code ?? parsed?.code ?? 200);
     const responseMessage = envelope?.resp_msg || result?.resp_msg || parsed?.msg || parsed?.message;
-    if (responseCode !== 200 || responseMessage && String(responseMessage).toLowerCase() !== "success") {
+    if (responseCode !== 200) {
       throw new Error(`AliExpress: ${responseMessage || "a API recusou a consulta."}`);
     }
     return parsed;
