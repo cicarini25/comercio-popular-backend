@@ -22,7 +22,7 @@ export function normalizeAliExpressImportItem(row, connector) {
   if (product.title.length > 255) throw new Error(`Item ${product.externalId}: título inválido.`);
   if (!product.imageUrl) throw new Error(`Item ${product.externalId}: imagem ausente.`);
 
-  validateUrl(product.imageUrl, "imagem", product.externalId, ["alicdn.com", "alicdn.com"]);
+  validateUrl(product.imageUrl, "imagem", product.externalId, ["alicdn.com", "aliexpress-media.com"]);
   return product;
 }
 
@@ -42,8 +42,7 @@ export async function importAliExpressProducts({
     appKey: process.env.ALIEXPRESS_APP_KEY,
     appSecret: process.env.ALIEXPRESS_APP_SECRET,
     trackingId: process.env.ALIEXPRESS_TRACKING_ID,
-    endpoint: process.env.ALIEXPRESS_API_ENDPOINT,
-    partnerId: process.env.ALIEXPRESS_PARTNER_ID
+    endpoint: process.env.ALIEXPRESS_API_ENDPOINT
   });
   connector.assertConfigured();
 

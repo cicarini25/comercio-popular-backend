@@ -2,24 +2,23 @@ import crypto from "crypto";
 import { MarketplaceConnector } from "../core/connector.js";
 import { normalizeGtin, normalizeText } from "../core/normalizer.js";
 
-// The current affiliate product API documentation lists the TOP router for affiliate calls. Seller APIs use a different Open Platform endpoint.
-const DEFAULT_ENDPOINT = "https://eco.taobao.com/router/rest";
+// Current AliExpress Open Platform business API gateway for affiliate methods.
+const DEFAULT_ENDPOINT = "https://api-sg.aliexpress.com/sync";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 50;
 
 /**
  * AliExpress Affiliate Open Platform connector.
- * The affiliate product APIs use signed TOP requests and do not require a
- * seller OAuth session. Credentials stay on the backend.
+ * Affiliate product APIs use signed requests and do not require a seller
+ * OAuth session. Credentials stay on the backend.
  */
 export class AliExpressAffiliateConnector extends MarketplaceConnector {
-  constructor({ appKey, appSecret, trackingId, endpoint, partnerId } = {}) {
+  constructor({ appKey, appSecret, trackingId, endpoint } = {}) {
     super({ code: "aliexpress", name: "AliExpress" });
     this.appKey = String(appKey ?? "").trim() || undefined;
     this.appSecret = String(appSecret ?? "").trim() || undefined;
     this.trackingId = String(trackingId ?? "").trim() || undefined;
     this.endpoint = String(endpoint ?? DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT;
-    this.partnerId = String(partnerId ?? "comercio-popular").trim() || "comercio-popular";
   }
 
   isConfigured() {
@@ -44,7 +43,6 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
     const safePage = Math.max(Number(page) || 1, 1);
     const safePageSize = Math.min(Math.max(Number(pageSize) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const params = {
-      app_signature: this.trackingId,
       fields: [
         "commission_rate", "app_sale_price", "app_sale_price_currency", "original_price",
         "original_price_currency", "discount", "evaluate_rate", "first_level_category_id",
@@ -146,16 +144,13 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
 
   async request(method, serviceParams = {}) {
     this.assertConfigured();
-    const publicParams = {
+    const params = {
       app_key: this.appKey,
-      format: "json",
       method,
-      partner_id: this.partnerId,
       sign_method: "hmac",
       timestamp: formatAliExpressTimestamp(),
-      v: "2.0"
+      ...serviceParams
     };
-    const params = { ...publicParams, ...serviceParams };
     const signPayload = Object.keys(params)
       .filter((key) => params[key] !== undefined && params[key] !== null && String(params[key]) !== "")
       .sort()
@@ -163,19 +158,32 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
       .join("");
     params.sign = crypto.createHmac("md5", this.appSecret).update(signPayload, "utf8").digest("hex").toUpperCase();
 
-    const body = new URLSearchParams();
+    let endpointUrl;
+    try {
+      endpointUrl = new URL(this.endpoint);
+    } catch {
+      throw new Error("ALIEXPRESS_API_ENDPOINT inválido.");
+    }
+    // Normalize the old Taobao gateway if it is still present in Railway.
+    if (endpointUrl.hostname === "eco.taobao.com") endpointUrl = new URL(DEFAULT_ENDPOINT);
+    if (endpointUrl.protocol !== "https:" || endpointUrl.hostname !== "api-sg.aliexpress.com" ||
+        endpointUrl.pathname !== "/sync" || endpointUrl.username || endpointUrl.password || endpointUrl.port) {
+      throw new Error("Use o endpoint oficial AliExpress https://api-sg.aliexpress.com/sync.");
+    }
+    endpointUrl.search = "";
+    endpointUrl.hash = "";
     for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null && String(value) !== "") body.set(key, String(value));
+      if (value !== undefined && value !== null && String(value) !== "") {
+        endpointUrl.searchParams.set(key, String(value));
+      }
     }
 
-    const response = await fetch(this.endpoint, {
-      method: "POST",
+    const response = await fetch(endpointUrl.href, {
+      method: "GET",
       headers: {
         accept: "application/json",
-        "content-type": "application/x-www-form-urlencoded;charset=utf-8",
         "user-agent": "ComercioPopular/1.0"
       },
-      body,
       signal: AbortSignal.timeout(20000)
     });
     const text = await response.text();
@@ -221,9 +229,7 @@ function toPositiveNumber(value) {
 }
 
 function formatAliExpressTimestamp(date = new Date()) {
-  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(shifted.getUTCSeconds())}`;
+  return date.toISOString();
 }
 
 export { DEFAULT_ENDPOINT, MAX_PAGE_SIZE, extractAffiliateResult, extractAffiliateEnvelope, formatAliExpressTimestamp };

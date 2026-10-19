@@ -27,8 +27,7 @@ function createAliExpressConnector() {
     appKey: process.env.ALIEXPRESS_APP_KEY,
     appSecret: process.env.ALIEXPRESS_APP_SECRET,
     trackingId: process.env.ALIEXPRESS_TRACKING_ID,
-    endpoint: process.env.ALIEXPRESS_API_ENDPOINT,
-    partnerId: process.env.ALIEXPRESS_PARTNER_ID
+    endpoint: process.env.ALIEXPRESS_API_ENDPOINT
   });
 }
 
@@ -1873,4 +1872,3 @@ router.post("/shopee/reclassify-misplaced-pet-products", requireIntegrationAdmin
 });
 
 export default router;
-
