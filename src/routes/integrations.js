@@ -5,6 +5,8 @@ import express from "express";
 import pool from "../db/pool.js";
 import { importMercadoLivreProducts, uniqueMercadoLivreItemIds } from "../integrations/mercadolivre/importer.js";
 import { ShopeeAffiliateConnector } from "../integrations/shopee/client.js";
+import { AliExpressAffiliateConnector } from "../integrations/aliexpress/client.js";
+import { importAliExpressProducts, MAX_IMPORT_ITEMS as MAX_ALIEXPRESS_IMPORT_ITEMS } from "../integrations/aliexpress/importer.js";
 import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
 import { resolveShopeeImages } from "../integrations/shopee/image-resolver.js";
 import { getShopeeSuggestedCategorySignals, normalizeShopeeSiteCategory, resolveShopeeSiteCategory } from "../integrations/shopee/category-resolver.js";
@@ -19,6 +21,16 @@ import {
 
 const router = express.Router();
 const MAX_ENQUEUE_ITEMS = 30000;
+
+function createAliExpressConnector() {
+  return new AliExpressAffiliateConnector({
+    appKey: process.env.ALIEXPRESS_APP_KEY,
+    appSecret: process.env.ALIEXPRESS_APP_SECRET,
+    trackingId: process.env.ALIEXPRESS_TRACKING_ID,
+    endpoint: process.env.ALIEXPRESS_API_ENDPOINT,
+    partnerId: process.env.ALIEXPRESS_PARTNER_ID
+  });
+}
 
 function requireIntegrationAdmin(req, res, next) {
   const configured = process.env.INTEGRATION_ADMIN_TOKEN?.trim();
@@ -81,6 +93,55 @@ router.post("/shopee/import-feed", requireIntegrationAdmin, async (req, res) => 
   } catch (error) {
     console.error("Falha na importação do feed Shopee:", error.message);
     res.status(400).json({ error: "Importação cancelada. Confira os campos e os logs do servidor; nenhuma alteração foi confirmada." });
+  }
+});
+
+// GET /api/integrations/aliexpress/health
+router.get("/aliexpress/health", requireIntegrationAdmin, async (_req, res) => {
+  const connector = createAliExpressConnector();
+  return res.json({ marketplace: "aliexpress", configured: connector.isConfigured() });
+});
+
+// GET /api/integrations/aliexpress/search
+// Consulta somente a API de afiliados e não grava produtos.
+router.get("/aliexpress/search", requireIntegrationAdmin, async (req, res) => {
+  try {
+    const connector = createAliExpressConnector();
+    const result = await connector.searchProducts({
+      keywords: typeof req.query.keywords === "string" ? req.query.keywords : "",
+      categoryIds: typeof req.query.categoryIds === "string" ? req.query.categoryIds : undefined,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      minSalePrice: req.query.minSalePrice,
+      maxSalePrice: req.query.maxSalePrice,
+      sort: typeof req.query.sort === "string" ? req.query.sort : undefined,
+      shipToCountry: typeof req.query.shipToCountry === "string" ? req.query.shipToCountry : "BR",
+      targetCurrency: typeof req.query.targetCurrency === "string" ? req.query.targetCurrency : "BRL",
+      targetLanguage: typeof req.query.targetLanguage === "string" ? req.query.targetLanguage : "PT"
+    });
+    return res.json({ ok: true, marketplace: "aliexpress", products: result.products, pageInfo: result.pageInfo });
+  } catch (error) {
+    console.error("Erro ao consultar ofertas AliExpress:", error);
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Falha ao consultar AliExpress." });
+  }
+});
+
+// POST /api/integrations/aliexpress/import
+// Importação curta e controlada. A prévia é feita no navegador antes desta chamada.
+router.post("/aliexpress/import", requireIntegrationAdmin, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length || items.length > MAX_ALIEXPRESS_IMPORT_ITEMS) {
+      return res.status(400).json({ error: `Selecione de 1 a ${MAX_ALIEXPRESS_IMPORT_ITEMS} produtos AliExpress.` });
+    }
+    const result = await importAliExpressProducts({
+      items,
+      categoryOverride: typeof req.body?.category === "string" ? req.body.category : ""
+    });
+    return res.json({ ok: true, marketplace: "aliexpress", ...result });
+  } catch (error) {
+    console.error("Erro na importação AliExpress:", error);
+    return res.status(400).json({ error: error instanceof Error ? error.message : "Falha na importação AliExpress." });
   }
 });
 
