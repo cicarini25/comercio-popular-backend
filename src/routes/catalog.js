@@ -223,10 +223,30 @@ function validateStoredAffiliateLink(value, platformCode) {
       ? sheinAffiliateLink
       : null;
   if (!validate) throw new Error('Plataforma de afiliado não permitida.');
+  return validate(value);function validateStoredAffiliateLink(value, platformCode) {
+  const validate = platformCode === 'shopee'
+    ? affiliateLink
+    : platformCode === 'shein'
+      ? sheinAffiliateLink
+      : platformCode === 'aliexpress'
+        ? aliexpressAffiliateLink
+      : null;
+  if (!validate) throw new Error('Plataforma de afiliado não permitida.');
   return validate(value);
 }
 
-// Link de compra (Shopee e SHEIN): exige sessão e usa exclusivamente a oferta ativa armazenada.
+function aliexpressAffiliateLink(value) {
+  const url = new URL(value);
+  const allowed = ['aliexpress.com', 'aliexpress.us', 'aliexpress.ru', 'aliexpress.com.br'];
+  if (url.protocol !== 'https:' || url.username || url.password || url.port ||
+      !allowed.some((host) => url.hostname === host || url.hostname.endsWith(`.\${host}`))) {
+    throw new Error('Use um link HTTPS de afiliado do AliExpress.');
+  }
+  return url.href;
+}
+}
+
+// Link de compra: exige sessão e usa exclusivamente a oferta ativa armazenada.
 router.get('/offers/:id/go', requireAuth, async (req, res) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
     return res.status(400).json({ error: 'ID de oferta inválido.' });
@@ -236,7 +256,7 @@ router.get('/offers/:id/go', requireAuth, async (req, res) => {
       JOIN affiliate_platforms ap ON ap.id=po.platform_id
       JOIN products p ON p.id=po.product_id
       WHERE po.id=$1 AND po.is_active=TRUE AND ap.is_active=TRUE
-        AND ap.code IN ('shopee','shein') AND p.status='ativo' AND po.offer_type='afiliada'`, [req.params.id]);
+        AND ap.code IN ('shopee','shein','aliexpress') AND p.status='ativo' AND po.offer_type='afiliada'`, [req.params.id]);
     if (!result.rows[0]?.affiliate_url) return res.status(404).json({ error: 'Oferta indisponível.' });
     const link = validateStoredAffiliateLink(result.rows[0].affiliate_url, result.rows[0].platform_code);
     res.set('Cache-Control', 'no-store');
