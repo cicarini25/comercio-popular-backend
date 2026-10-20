@@ -1,7 +1,8 @@
 import crypto from "crypto";
 import { MarketplaceConnector } from "../core/connector.js";
 import { normalizeGtin, normalizeText } from "../core/normalizer.js";
-import { buildAliExpressKeywords, filterRelevantAliExpressProducts } from "./search-relevance.js";
+import { classifySiteProduct } from "../core/site-category-resolver.js";
+import { buildAliExpressKeywords, filterRelevantAliExpressProducts } from "../core/product-search-matcher.js";
 
 // Current AliExpress Open Platform business API gateway for affiliate methods.
 const DEFAULT_ENDPOINT = "https://api-sg.aliexpress.com/sync";
@@ -139,6 +140,7 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
       currency: String(item?.target_sale_price_currency || item?.app_sale_price_currency || item?.currency || "BRL"),
       commissionRate: String(item?.commission_rate ?? "").trim(),
       rating: String(item?.evaluate_rate ?? "").trim(),
+      siteCategory: classifySiteProduct({ category, title }),
       shopId: item?.shop_id ? String(item.shop_id) : "",
       shopUrl: String(item?.shop_url ?? "").trim(),
       attributes: {

@@ -1,5 +1,6 @@
 import pool from "../../db/pool.js";
 import { buildNormalizedProduct } from "../core/normalizer.js";
+import { classifySiteProduct } from "../core/site-category-resolver.js";
 import {
   buildCatalogCanonicalKey,
   findCatalogMatchCandidates,
@@ -76,7 +77,12 @@ export async function importAliExpressProducts({
 
   for (const normalized of normalizedProducts) {
     const identity = buildNormalizedProduct(normalized);
-    const category = String(categoryOverride || normalized.category || "AliExpress").trim().slice(0, 100);
+    const resolvedCategory = classifySiteProduct({
+      category: normalized.category,
+      title: normalized.title,
+      categoryOverride
+    });
+    const category = String(resolvedCategory || categoryOverride || normalized.category || "AliExpress").trim().slice(0, 100);
     const existingOffer = await db.query(
       `SELECT po.id, po.product_id
          FROM product_offers po
