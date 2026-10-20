@@ -108,6 +108,7 @@ router.get("/aliexpress/search", requireIntegrationAdmin, async (req, res) => {
     const connector = createAliExpressConnector();
     const result = await connector.searchProducts({
       keywords: typeof req.query.keywords === "string" ? req.query.keywords : "",
+      siteCategory: typeof req.query.siteCategory === "string" ? req.query.siteCategory : "",
       categoryIds: typeof req.query.categoryIds === "string" ? req.query.categoryIds : undefined,
       page: req.query.page,
       pageSize: req.query.pageSize,
@@ -118,7 +119,14 @@ router.get("/aliexpress/search", requireIntegrationAdmin, async (req, res) => {
       targetCurrency: typeof req.query.targetCurrency === "string" ? req.query.targetCurrency : "BRL",
       targetLanguage: typeof req.query.targetLanguage === "string" ? req.query.targetLanguage : "PT"
     });
-    return res.json({ ok: true, marketplace: "aliexpress", products: result.products, pageInfo: result.pageInfo });
+    return res.json({
+      ok: true,
+      marketplace: "aliexpress",
+      products: result.products,
+      pageInfo: result.pageInfo,
+      receivedCount: result.receivedCount,
+      filteredOut: result.filteredOut
+    });
   } catch (error) {
     console.error("Erro ao consultar ofertas AliExpress:", error);
     return res.status(400).json({ error: error instanceof Error ? error.message : "Falha ao consultar AliExpress." });

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { MarketplaceConnector } from "../core/connector.js";
 import { normalizeGtin, normalizeText } from "../core/normalizer.js";
+import { buildAliExpressKeywords, filterRelevantAliExpressProducts } from "./search-relevance.js";
 
 // Current AliExpress Open Platform business API gateway for affiliate methods.
 const DEFAULT_ENDPOINT = "https://api-sg.aliexpress.com/sync";
@@ -27,6 +28,7 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
 
   async searchProducts({
     keywords = "",
+    siteCategory = "",
     categoryIds,
     page = 1,
     pageSize = DEFAULT_PAGE_SIZE,
@@ -62,7 +64,8 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
       ship_to_country: shipToCountry
     };
 
-    if (String(keywords).trim()) params.keywords = String(keywords).trim();
+    const aliExpressKeywords = buildAliExpressKeywords(keywords, siteCategory);
+    if (aliExpressKeywords) params.keywords = aliExpressKeywords;
     if (categoryIds) params.category_ids = String(categoryIds).trim();
     if (minSalePrice !== undefined && minSalePrice !== "") params.min_sale_price = Number(minSalePrice);
     if (maxSalePrice !== undefined && maxSalePrice !== "") params.max_sale_price = Number(maxSalePrice);
@@ -75,9 +78,13 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
       : Array.isArray(result?.products)
         ? result.products
         : [];
+    const normalizedProducts = products.map((product) => this.normalizeProduct(product));
+    const relevant = filterRelevantAliExpressProducts(normalizedProducts, keywords, siteCategory);
 
     return {
-      products: products.map((product) => this.normalizeProduct(product)),
+      products: relevant.products,
+      receivedCount: relevant.receivedCount,
+      filteredOut: relevant.filteredOut,
       pageInfo: {
         page: Number(result?.current_page_no ?? safePage),
         pageSize: Number(result?.current_record_count ?? products.length),
@@ -233,4 +240,3 @@ function formatAliExpressTimestamp(date = new Date()) {
 }
 
 export { DEFAULT_ENDPOINT, MAX_PAGE_SIZE, extractAffiliateResult, extractAffiliateEnvelope, formatAliExpressTimestamp };
-
