@@ -325,20 +325,26 @@ export function scoreProductTitleMatch(product, keywords, selectedCategory = "")
   const matches = groups.map((group) => groupMatch(group, titleTokens));
   const coverage = matches.filter((match) => match.score > 0).length / groups.length;
   const fuzzyScore = matches.reduce((sum, match) => sum + match.score, 0) / groups.length;
-  const similarity = Math.max(phraseScore, coverage === 1 ? fuzzyScore : 0);
+  const textSimilarity = Math.max(phraseScore, coverage === 1 ? fuzzyScore : 0);
   const requestedCategory = resolveSearchCategory(keywords, selectedCategory);
+  const categoryOnlyQuery = Boolean(requestedCategory && normalizeSiteCategory(keywords) === requestedCategory);
   const productCategory = classifySiteProduct({ category: product?.category, title });
+  const categoryOnlyMatch = categoryOnlyQuery && productCategory === requestedCategory;
+  const similarity = categoryOnlyQuery ? (categoryOnlyMatch ? 1 : 0) : textSimilarity;
   const categoryCompatible = !requestedCategory || !productCategory || requestedCategory === productCategory;
   const accessoryOnly = !queryMentionsAccessoryCue(keywords) && isAccessoryOnlyCandidate(title, keywords);
   const firstPosition = Math.min(...matches.map((match) => match.position));
   const headCompatible = phraseScore > 0 || firstPosition <= 5;
-  const accepted = similarity >= 0.78 && categoryCompatible && !accessoryOnly && headCompatible;
+  const accepted = categoryOnlyQuery
+    ? categoryOnlyMatch && !accessoryOnly
+    : similarity >= 0.78 && categoryCompatible && !accessoryOnly && headCompatible;
 
   return {
     score: Number(similarity.toFixed(3)),
     accepted,
     category: productCategory,
     requestedCategory,
+    categoryOnlyQuery,
     categoryCompatible,
     accessoryOnly
   };

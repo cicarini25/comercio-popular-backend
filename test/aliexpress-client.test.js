@@ -253,3 +253,22 @@ test("a categoria inferida do texto pesquisado prevalece sobre a categoria de de
   assert.equal(isRelevantAliExpressProduct({ title: "Gas stove two burner" }, "air fryer"), false);
   assert.equal(isRelevantAliExpressProduct({ title: "Pneu de carro radial 205/55 R16" }, "pneus"), true);
 });
+
+test("busca pelo nome da categoria inclui tipos variados de brinquedo sem abrir mão da categoria correta", () => {
+  const toys = [
+    { title: "Magnetic Building Blocks Set 100 Pieces", category: "Toys & Hobbies" },
+    { title: "Wooden Jigsaw Puzzle for Kids", category: "Toys & Hobbies" },
+    { title: "Anime Action Figure Doll", category: "Toys & Hobbies" },
+    { title: "Crochet Plush Bat Toy", category: "Toys & Hobbies" }
+  ];
+  const notToys = [
+    { title: "Replacement Strap for Toy", category: "Toys & Hobbies" },
+    { title: "USB Phone Charger", category: "Toys & Hobbies" }
+  ];
+
+  const result = filterRelevantAliExpressProducts([...toys, ...notToys], "Brinquedos");
+  assert.deepEqual(result.products.map((product) => product.title), toys.map((product) => product.title));
+  assert.equal(result.receivedCount, 6);
+  assert.equal(result.filteredOut, 2);
+  assert.equal(scoreProductTitleMatch({ title: "Gas Stove Two Burner" }, "air fryer").accepted, false);
+});

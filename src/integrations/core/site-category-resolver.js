@@ -53,8 +53,13 @@ const categoryAliases = new Map(Object.entries({
   'furniture': 'Móveis',
   'sports outdoors': 'Esportes & Lazer',
   'sports recreation': 'Esportes & Lazer',
+  'toy': 'Brinquedos',
   'toys': 'Brinquedos',
   'toys and games': 'Brinquedos',
+  'toy hobby': 'Brinquedos',
+  'toys hobbies': 'Brinquedos',
+  'toys and hobbies': 'Brinquedos',
+  'dolls and stuffed toys': 'Brinquedos',
   'games consoles': 'Games',
   'video games': 'Games',
   'computers accessories': 'Computadores',
@@ -144,7 +149,7 @@ function inferCategoryFromText(title, description = '') {
   if (/(hidraul|plumbing|tubulacao|tubos? de agua|conexao hidraulica|fio eletrico|cabos? eletricos?|cabo usb|usb cable|\bwires?\b|\bcables?\b|tomadas?|outlets?|sockets?|soquetes?|disjuntores?|interruptores?|switches?|lamp holder|lamp socket|doorbell|campainha|faucets?|torneiras?|\bpipes?\b|eletrica residencial)/.test(text)) return 'ELÉTRICA & HIDRÁULICA';
   if (/(luminaria|luminarias|lighting fixture|lighting fixtures|light fixture|light fixtures|light bulb|light bulbs|\bbulbs?\b|\blamps?\b|lampada|lampadas|ceiling light|wall lamp|desk lamp|floor lamp|pendant light|chandelier|lustre|arandela|plafon|downlight|spotlight)/.test(text)) return 'LUMINÁRIAS';
   if (/(bolsa|bolsas|handbag|handbags|backpack|backpacks|mochila|mochilas|rucksack|tote bag|purse)/.test(text)) return 'BOLSAS & MOCHILAS';
-  if (/(brinqued|toys?|bonec|lego|pelucia|quebra cabeca|massinha de modelar|playset|carrinho infantil|miniatura de brinquedo)/.test(text)) return 'Brinquedos';
+  if (/(brinqued|toys?|bonec|lego|plush|stuffed (animal|toy)s?|doll(?:house)?s?|action figures?|building blocks?|magnetic blocks?|construction blocks?|jigsaw puzzles?|puzzles?|quebra cabeca|massinha de modelar|playset|carrinho infantil|miniatura de brinquedo|board games?|educational toys?|pretend play|remote control (toys?|cars?)|rc cars?|model kits|toy cars?|toy vehicles?|baby toys?|rattles?|teethers?)/.test(text)) return 'Brinquedos';
   if (/(racao|racoes|coleira|peitoral para cachorro|arranhador|areia higienica|petisco|cachorro|cachorros|gato|gatos|animal de estimacao|produto pet)/.test(text)) return 'Pets';
   if (/(violao|guitarra|violino|ukulele|cavaquinho|teclado musical|piano|bateria musical|saxofone|flauta|instrumento musical|pedal de guitarra)/.test(text)) return 'Instrumentos Musicais';
   if (/(moda infantil|roupa infantil|roupas infantis|vestido infantil|conjunto infantil|roupa de bebe|roupas de bebe|kids clothing|baby clothing)/.test(text)) {
