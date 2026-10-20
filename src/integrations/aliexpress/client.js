@@ -3,6 +3,7 @@ import { MarketplaceConnector } from "../core/connector.js";
 import { normalizeGtin, normalizeText } from "../core/normalizer.js";
 import { classifySiteProduct } from "../core/site-category-resolver.js";
 import { buildAliExpressKeywords, filterRelevantAliExpressProducts } from "../core/product-search-matcher.js";
+import { filterByAliExpressSearchRule } from "./search-rules.js";
 
 // Current AliExpress Open Platform business API gateway for affiliate methods.
 const DEFAULT_ENDPOINT = "https://api-sg.aliexpress.com/sync";
@@ -81,11 +82,12 @@ export class AliExpressAffiliateConnector extends MarketplaceConnector {
         : [];
     const normalizedProducts = products.map((product) => this.normalizeProduct(product));
     const relevant = filterRelevantAliExpressProducts(normalizedProducts, keywords, siteCategory);
+    const ruleFiltered = filterByAliExpressSearchRule(relevant.products, keywords);
 
     return {
-      products: relevant.products,
+      products: ruleFiltered.products,
       receivedCount: relevant.receivedCount,
-      filteredOut: relevant.filteredOut,
+      filteredOut: relevant.filteredOut + ruleFiltered.filteredOut,
       pageInfo: {
         page: Number(result?.current_page_no ?? safePage),
         pageSize: Number(result?.current_record_count ?? products.length),
