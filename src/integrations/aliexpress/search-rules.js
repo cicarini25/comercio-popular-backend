@@ -183,40 +183,26 @@ export function getAliExpressSearchRule(keywords = "") {
 
 export function validateAliExpressSearchCandidate(product, keywords = "") {
   const rule = getAliExpressSearchRule(keywords);
-  // Unmapped searches must remain exactly as accepted by the existing matcher.
-  if (!rule) return { eligible: true, rule: undefined, reason: "unmapped-search" };
+
+  // Pesquisas sem regra específica continuam usando o motor geral.
+  if (!rule) {
+    return { eligible: true, rule: undefined, reason: "unmapped-search" };
+  }
 
   const titleTokens = tokenizeBoundarySafe(product?.title);
+
+  // O título precisa indicar claramente o produto pesquisado.
   if (!containsAnyTerm(titleTokens, rule.titleTerms)) {
     return { eligible: false, rule, reason: "missing-product-term" };
   }
+
+  // Bloqueia apenas acessórios, peças e reparos claramente identificados.
   if (containsAnyTerm(titleTokens, rule.excludedTerms)) {
     return { eligible: false, rule, reason: "excluded-term" };
   }
 
-  const currency = getProductCurrency(product);
-  if (currency !== "BRL") {
-    return { eligible: false, rule, reason: "non-brl-currency", currency };
-  }
-
-  const salePrice = getSalePrice(product);
-  if (salePrice === undefined || salePrice < rule.minimumSalePriceBrl) {
-    return {
-      eligible: false,
-      rule,
-      reason: "below-minimum-sale-price",
-      salePrice,
-      minimumSalePriceBrl: rule.minimumSalePriceBrl
-    };
-  }
-
-  return {
-    eligible: true,
-    rule,
-    reason: "accepted",
-    currency,
-    salePrice
-  };
+  // Preço e moeda não eliminam produtos relevantes.
+  return { eligible: true, rule, reason: "accepted" };
 }
 
 export function isEligibleByAliExpressSearchRule(product, keywords = "") {

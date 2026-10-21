@@ -22,9 +22,9 @@ test("exporta regras congeladas e reconhece intenções apenas por limites de pa
   assert.equal(getAliExpressSearchRule("pneumatic tool"), undefined);
 });
 
-test("aceita pneu real acima do piso BRL e rejeita acessório, título sem produto e outra moeda", () => {
+test("aceita pneu real em qualquer preço/moeda e rejeita acessório ou título sem produto", () => {
   assert.equal(
-    isEligibleByAliExpressSearchRule(candidate("Pneu automotivo radial 205/55 R16", 120), "pneus"),
+    isEligibleByAliExpressSearchRule(candidate("Pneu automotivo radial 205/55 R16", 39.90), "pneus"),
     true
   );
   assert.equal(
@@ -36,12 +36,12 @@ test("aceita pneu real acima do piso BRL e rejeita acessório, título sem produ
     "missing-product-term"
   );
   assert.equal(
-    validateAliExpressSearchCandidate(candidate("Car tire 205/55 R16", 500, "USD"), "pneus").reason,
-    "non-brl-currency"
+    isEligibleByAliExpressSearchRule(candidate("Car tire 205/55 R16", 500, "USD"), "pneus"),
+    true
   );
 });
 
-test("aplica termos proibidos e piso de venda para geladeiras sem usar preço original", () => {
+test("aplica termos proibidos para geladeiras sem bloquear preço ou moeda", () => {
   assert.equal(
     isEligibleByAliExpressSearchRule(candidate("Geladeira frost free 400L", 800, "BRL", { originalPrice: 1200 }), "geladeira"),
     true
@@ -55,12 +55,12 @@ test("aplica termos proibidos e piso de venda para geladeiras sem usar preço or
     false
   );
   assert.equal(
-    validateAliExpressSearchCandidate(candidate("Fridge 120L", 799.99), "fridge").reason,
-    "below-minimum-sale-price"
+    isEligibleByAliExpressSearchRule(candidate("Fridge 120L", 79.99), "fridge"),
+    true
   );
   assert.equal(
     isEligibleByAliExpressSearchRule(candidate("Refrigerador 400L", 1200, "EUR"), "refrigerador"),
-    false
+    true
   );
 });
 
@@ -137,9 +137,9 @@ test("integra a regra no resultado do cliente AliExpress com mock de fetch", asy
 
   try {
     const result = await connector.searchProducts({ keywords: "pneus" });
-    assert.deepEqual(result.products.map((product) => product.externalId), ["1"]);
+    assert.deepEqual(result.products.map((product) => product.externalId), ["1", "3", "4"]);
     assert.equal(result.receivedCount, 4);
-    assert.equal(result.filteredOut, 3);
+    assert.equal(result.filteredOut, 1);
     assert.equal(capturedUrl.searchParams.get("min_sale_price"), null);
   } finally {
     global.fetch = originalFetch;
