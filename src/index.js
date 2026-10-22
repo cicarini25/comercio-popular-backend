@@ -12,6 +12,7 @@ import smsRoutes from './routes/sms.js';
 import catalogRoutes from './routes/catalog.js';
 import integrationRoutes from './routes/integrations.js';
 import shopeeImageRoutes from './routes/shopee-images.js';
+import stagingSyncRoutes from './routes/staging-sync.js';
 import { completeMercadoLivreOAuth } from './integrations/mercadolivre/oauth.js';
 import { authRateLimit } from './middleware/auth-rate-limit.js';
 
@@ -86,6 +87,7 @@ app.use('/api/catalog', catalogRoutes);
 app.use('/shopee-images', express.static('/data/shopee-images', { maxAge: '7d', fallthrough: false }));
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/integrations/shopee-images', shopeeImageRoutes);
+app.use('/api/staging', stagingSyncRoutes);
 
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
