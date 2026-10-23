@@ -3,6 +3,7 @@ import { sheinAffiliateLink } from "../integrations/shein/feed-importer.js";
 import express from 'express';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
+import { ACCESSORY_TITLE_KEYS } from '../catalog-category-overrides.js';
 
 const router = express.Router();
 
@@ -31,6 +32,14 @@ router.get('/products', async (req, res) => {
 
   const values = [];
   const where = ["p.status = 'ativo'"];
+  values.push(ACCESSORY_TITLE_KEYS);
+  const accessoryTitlesParam = values.length;
+  const effectiveCategorySql = `(CASE
+    WHEN p.category = 'Eletrodomésticos'
+      AND lower(trim(p.title)) = ANY($${accessoryTitlesParam}::text[])
+      THEN 'ELETRO & ACESSÓRIOS'
+    ELSE p.category
+  END)`;
 
   if (q) {
     values.push(`%${q}%`);
@@ -43,7 +52,7 @@ router.get('/products', async (req, res) => {
 
   if (category) {
     values.push(category);
-    where.push(`p.category = $${values.length}`);
+    where.push(`${effectiveCategorySql} = $${values.length}`);
   }
 
   if (platform) {
@@ -71,7 +80,7 @@ router.get('/products', async (req, res) => {
          p.description,
          p.price,
          p.image_url,
-         p.category,
+         ${effectiveCategorySql} AS category,
          p.brand,
          p.ean,
          p.slug,
