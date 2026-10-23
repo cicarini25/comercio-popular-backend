@@ -22,5 +22,6 @@ const ACCESSORY_TITLES = [
 ];
 
 export const ACCESSORY_TITLE_KEYS = ACCESSORY_TITLES.map((title) => title.toLocaleLowerCase('pt-BR'));
+export const ACCESSORY_TITLE_PATTERNS = ACCESSORY_TITLE_KEYS.map((title) => `${title}%`);
 
 export { ACCESSORY_TITLES };
