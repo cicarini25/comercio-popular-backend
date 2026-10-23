@@ -3,7 +3,7 @@ import { sheinAffiliateLink } from "../integrations/shein/feed-importer.js";
 import express from 'express';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
-import { ACCESSORY_TITLE_PATTERNS } from '../catalog-category-overrides.js';
+import { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS } from '../catalog-category-overrides.js';
 
 const router = express.Router();
 
@@ -34,10 +34,15 @@ router.get('/products', async (req, res) => {
   const where = ["p.status = 'ativo'"];
   values.push(ACCESSORY_TITLE_PATTERNS);
   const accessoryTitlesParam = values.length;
+  values.push(COMPLETE_APPLIANCE_TITLE_PATTERNS);
+  const completeApplianceTitlesParam = values.length;
   const effectiveCategorySql = `(CASE
     WHEN p.category = 'Eletrodomésticos'
       AND lower(trim(p.title)) LIKE ANY($${accessoryTitlesParam}::text[])
       THEN 'ELETRO & ACESSÓRIOS'
+    WHEN p.category = 'ELETRO & ACESSÓRIOS'
+      AND lower(trim(p.title)) LIKE ANY($${completeApplianceTitlesParam}::text[])
+      THEN 'Eletrodomésticos'
     ELSE p.category
   END)`;
 

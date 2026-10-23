@@ -19,9 +19,56 @@ const ACCESSORY_TITLES = [
   'Conjunto Eletroldo Fogão/cooktop Brastemp 4 e 5 Bocas',
   'Usina 6 Saidas Acendimento Fogao Brastemp 5 Bocas',
   'Usina De Ignição Original Fogão Brastemp E Consul 5 Saídas',
+  // Componentes observados na resposta de produção como Eletrodomésticos.
+  'Agitador Batedor Tanquinho Colormaq 12/13/15kg Completo',
+  '1.2 UF novo capacitor de forno de microondas Bicai CH85 capacitor de alta tensão',
+  'KIT AGITADOR BATEDOR 8 BLADES 8 PÁS P/ LAVADORA BRASTEMP/CONSUL',
+  'Tirante Lavadora Brastemp 7kg A 11kg 4 Peças',
+  'Pressostato Lavadora Roupas Consul Facilite Cwe11 Cwe10',
+  'Capacitor Maquina de Lavar 45uf 127v Para Lavadora Roupas Electrolux',
+  'Banda Cinta do Freio Lavadora Maquina de Lavar Brastemp Consul',
+  'Eletrobomba Bomba Drenagem 127v Lavadora Electrolux Lt12b',
+  'AGITADOR 8 BLADES 8 PÁS P/ LAVADORA BRASTEMP/CONSUL',
+  'Agitador Batedor Lavadora Electrolux Lt15f',
+  'AGITADOR COMPLETO 8 PÁS 8 BLADES LAVADORA BRASTEMP/CONSUL',
+  'Pressostato Lavadora Consul Facilite Cws11 Cwg12',
+  'Micro Chave Lavadora Brastemp Bwc10a',
+  'Kit 4 Molas Vara De Suspensão Lavadora Electrolux',
+  'Kit 4 Molas Tirante Vara De Suspensão maquina de lavar Lavadora Electrolux',
+  'Kit 20/40 Molas Tirante Vara De Suspensão Maquina Lavar Lavadora Electrolux',
+  'Kit 8 Tirantes Maquina De Lavar Eletrônica',
+  'Kit Bucha e Retentor Tanquinho Colormaq',
+  'Kit Mica Micro-ondas 14x14cm',
+  'Kit Chave de Segurança Porta Micro-ondas 16A',
+  'Kit Vedação Retentor Bucha Agitador Tanquinho',
+  'MOTOR PRATO P/ MICROONDAS',
+  'MOTOR GIRA PRATO MICROONDAS',
+  'Membrana Teclado Microondas LG',
+  'Membrana Teclado Microondas Electrolux',
+  'Membrana do Painel Máquina de Lavar Brastemp',
+  'Polia Agitador Tanquinho Colormaq',
+  'Saca Agitador Brastemp',
+  'Tirante de Suspensão Máquina de Lavar Electrolux',
+  'Forno de microondas pé almofada forno microondas alta Base fogão indução',
+];
+
+const COMPLETE_APPLIANCE_TITLES = [
+  'Tanquinho Britânia 15kg Semi Automático BLT15A',
+  'Máquina de lavar 12Kg Philco 16 Modos de operação PLR12A',
+  'Máquina de Lavar Roupa Midea 12kg Sistema Wave Impeller e Compacta Branca',
+  'Máquina de Lavar Midea MA512W150A-WK05 15kg Automática Branca Abertura Superior',
+  'Máquina de Lavar Brastemp 15kg Automática Cesto Inox Multi Dispenser BWF15AB',
+  'Máquina De Lavar 12kg Branca Wave Impeller Midea MAV04W120/WKBR04',
+  'Mini máquina de lavar roupa 11L dobrável portátil moderna máquina de lavar automática',
+  'Micro-Ondas Mondial 21 Litros MO-01-21-B Preto 1200W Display Digital',
+  'Maquina de Lavar Midea Wave Agitador 15KG 13 programas com Timer Digital',
+  'Fogão a Gás 4 Bocas Inox Embutir',
+  'Fogão Itatiaia Star New 4 Bocas Com Acendimento Automático',
 ];
 
 export const ACCESSORY_TITLE_KEYS = ACCESSORY_TITLES.map((title) => title.toLocaleLowerCase('pt-BR'));
 export const ACCESSORY_TITLE_PATTERNS = ACCESSORY_TITLE_KEYS.map((title) => `${title}%`);
+export const COMPLETE_APPLIANCE_TITLE_KEYS = COMPLETE_APPLIANCE_TITLES.map((title) => title.toLocaleLowerCase('pt-BR'));
+export const COMPLETE_APPLIANCE_TITLE_PATTERNS = COMPLETE_APPLIANCE_TITLE_KEYS.map((title) => `${title}%`);
 
-export { ACCESSORY_TITLES };
+export { ACCESSORY_TITLES, COMPLETE_APPLIANCE_TITLES };
