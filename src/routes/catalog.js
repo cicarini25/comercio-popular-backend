@@ -4,6 +4,7 @@ import express from 'express';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
 import { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS } from '../catalog-category-overrides.js';
+import { AUDITED_PRODUCT_CATEGORY_OVERRIDES } from '../catalog-product-category-overrides.js';
 
 const router = express.Router();
 
@@ -36,7 +37,11 @@ router.get('/products', async (req, res) => {
   const accessoryTitlesParam = values.length;
   values.push(COMPLETE_APPLIANCE_TITLE_PATTERNS);
   const completeApplianceTitlesParam = values.length;
+  values.push(JSON.stringify(AUDITED_PRODUCT_CATEGORY_OVERRIDES));
+  const auditedCategoryOverridesParam = values.length;
   const effectiveCategorySql = `(CASE
+    WHEN (${auditedCategoryOverridesParam}::jsonb ? p.id::text)
+      THEN ${auditedCategoryOverridesParam}::jsonb ->> p.id::text
     WHEN p.category = 'Eletrodomésticos'
       AND lower(trim(p.title)) LIKE ANY($${accessoryTitlesParam}::text[])
       THEN 'ELETRO & ACESSÓRIOS'
