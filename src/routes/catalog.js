@@ -40,8 +40,8 @@ router.get('/products', async (req, res) => {
   values.push(JSON.stringify(AUDITED_PRODUCT_CATEGORY_OVERRIDES));
   const auditedCategoryOverridesParam = values.length;
   const effectiveCategorySql = `(CASE
-    WHEN (${auditedCategoryOverridesParam}::jsonb ? p.id::text)
-      THEN ${auditedCategoryOverridesParam}::jsonb ->> p.id::text
+    WHEN ($${auditedCategoryOverridesParam}::jsonb ? p.id::text)
+      THEN $${auditedCategoryOverridesParam}::jsonb ->> p.id::text
     WHEN p.category = 'Eletrodomésticos'
       AND lower(trim(p.title)) LIKE ANY($${accessoryTitlesParam}::text[])
       THEN 'ELETRO & ACESSÓRIOS'
