@@ -3,8 +3,9 @@ import { sheinAffiliateLink } from "../integrations/shein/feed-importer.js";
 import express from 'express';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
-import { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS } from '../catalog-category-overrides.js';
+import { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS, corrigirCategoriaDoProdutoGeral } from '../catalog-category-overrides.js';
 import { AUDITED_PRODUCT_CATEGORY_OVERRIDES } from '../catalog-product-category-overrides.js';
+
 
 const router = express.Router();
 
@@ -122,15 +123,17 @@ router.get('/products', async (req, res) => {
            ) ORDER BY po.price NULLS LAST, ap.name)
            FROM product_offers po
            LEFT JOIN affiliate_platforms ap ON ap.id = po.platform_id
-           WHERE po.product_id = p.id
-             AND po.is_active = TRUE
-             AND (po.platform_id IS NULL OR ap.is_active = TRUE)
-         ), '[]'::json) AS offers
-       FROM products p
-       WHERE ${where.join(' AND ')}
-       ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC
-       LIMIT $${limitParam}
-       OFFSET $${offsetParam}`,
+          const produtosTotalmenteCorrigidos = result.rows.map(produto => corrigirCategoriaDoProdutoGeral(produto));
+
+res.json({
+  products: produtosTotalmenteCorrigidos,
+  pagination: {
+    limit,
+    offset,
+    returned: produtosTotalmenteCorrigidos.length
+  }
+});
+
       values
     );
 
