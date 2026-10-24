@@ -123,15 +123,17 @@ router.get('/products', async (req, res) => {
            ) ORDER BY po.price NULLS LAST, ap.name)
            FROM product_offers po
            LEFT JOIN affiliate_platforms ap ON ap.id = po.platform_id
-          const produtosTotalmenteCorrigidos = result.rows.map(produto => corrigirCategoriaDoProdutoGeral(produto));
+             const produtosTotalmenteCorrigidos = result.rows.map(p => corrigirCategoriaDoProdutoGeral(p));
 
-res.json({
-  products: produtosTotalmenteCorrigidos,
-  pagination: {
-    limit,
-    offset,
-    returned: produtosTotalmenteCorrigidos.length
-  }
+    res.json({
+      products: produtosTotalmenteCorrigidos,
+      pagination: {
+        limit,
+        offset,
+        returned: produtosTotalmenteCorrigidos.length
+      }
+    });
+
 });
 
       values
