@@ -53,7 +53,7 @@ const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
   'guitarra': 'Instrumentos Musicais',
   'teclado musical': 'Instrumentos Musicais',
   'smartwatch': 'RELÓGIOS',
-  'relogio masculino': 'RELÓGIOS',
+  'relogio masculino': 'RELÓOIOGS',
   'relogio feminino': 'RELÓGIOS',
   'fogao cooktop': 'Eletrodomésticos',
   'fogao 4 bocas': 'Eletrodomésticos',
