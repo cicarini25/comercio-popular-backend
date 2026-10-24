@@ -1,4 +1,4 @@
-const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
+export const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
   'notebook': 'Notebook',
   'laptop': 'Notebook',
   'macbook': 'Notebook',
@@ -53,7 +53,7 @@ const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
   'guitarra': 'Instrumentos Musicais',
   'teclado musical': 'Instrumentos Musicais',
   'smartwatch': 'RELÓGIOS',
-  'relogio masculino': 'RELÓOIOGS',
+  'relogio masculino': 'RELÓGIOS',
   'relogio feminino': 'RELÓGIOS',
   'fogao cooktop': 'Eletrodomésticos',
   'fogao 4 bocas': 'Eletrodomésticos',
@@ -69,7 +69,7 @@ const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
   'fio eletrico': 'ELÉTRICA & HIDRÁULICA'
 };
 
-function corrigirCategoriaDoProdutoGeral(produto) {
+export function corrigirCategoriaDoProdutoGeral(produto) {
   if (!produto || !produto.title) return produto;
 
   const tituloLimpo = produto.title
@@ -87,12 +87,5 @@ function corrigirCategoriaDoProdutoGeral(produto) {
   return produto;
 }
 
-const ACCESSORY_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
-const COMPLETE_APPLIANCE_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
-
-export { 
-  ACCESSORY_TITLE_PATTERNS, 
-  COMPLETE_APPLIANCE_TITLE_PATTERNS, 
-  MAPEAMENTO_GERAL_DE_CATEGORIAS,
-  corrigirCategoriaDoProdutoGeral 
-};
+export const ACCESSORY_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
+export const COMPLETE_APPLIANCE_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
