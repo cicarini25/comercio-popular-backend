@@ -3,9 +3,8 @@ import { sheinAffiliateLink } from "../integrations/shein/feed-importer.js";
 import express from 'express';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
-import { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS, corrigirCategoriaDoProdutoGeral } from '../catalog-category-overrides.js';
+import { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS } from '../catalog-category-overrides.js';
 import { AUDITED_PRODUCT_CATEGORY_OVERRIDES } from '../catalog-product-category-overrides.js';
-
 
 const router = express.Router();
 
@@ -22,8 +21,6 @@ function sanitizeLimit(value) {
   return Math.min(parsed || DEFAULT_LIMIT, MAX_LIMIT);
 }
 
-// GET /api/catalog/products
-// Catálogo público: não expõe affiliate_url/product_url diretamente.
 router.get('/products', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -123,19 +120,15 @@ router.get('/products', async (req, res) => {
            ) ORDER BY po.price NULLS LAST, ap.name)
            FROM product_offers po
            LEFT JOIN affiliate_platforms ap ON ap.id = po.platform_id
-             const produtosTotalmenteCorrigidos = result.rows.map(p => corrigirCategoriaDoProdutoGeral(p));
-
-    res.json({
-      products: produtosTotalmenteCorrigidos,
-      pagination: {
-        limit,
-        offset,
-        returned: produtosTotalmenteCorrigidos.length
-      }
-    });
-
-});
-
+           WHERE po.product_id = p.id
+             AND po.is_active = TRUE
+             AND (po.platform_id IS NULL OR ap.is_active = TRUE)
+         ), '[]'::json) AS offers
+       FROM products p
+       WHERE ${where.join(' AND ')}
+       ORDER BY p.updated_at DESC NULLS LAST, p.created_at DESC
+       LIMIT $${limitParam}
+       OFFSET $${offsetParam}`,
       values
     );
 
@@ -153,67 +146,18 @@ router.get('/products', async (req, res) => {
   }
 });
 
-// GET /api/catalog/products/:id
-// Detalhes públicos do produto + ofertas disponíveis.
 router.get('/products/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT
-         p.id,
-         p.title,
-         p.description,
-         p.price,
-         p.image_url,
-         p.category,
-         p.brand,
-         p.ean,
-         p.slug,
-         p.product_kind,
-         p.stock_units,
-         p.is_achadinho,
-         p.status,
-         p.metadata,
-         p.created_at,
-         p.updated_at,
+      `SELECT p.id, p.title, p.description, p.price, p.image_url, p.category, p.brand, p.ean, p.slug, p.product_kind, p.stock_units, p.is_achadinho, p.status, p.metadata, p.created_at, p.updated_at,
          COALESCE((
-           SELECT json_agg(json_build_object(
-             'id', po.id,
-             'offerType', po.offer_type,
-             'platform', json_build_object(
-               'code', ap.code,
-               'name', ap.name,
-               'logoUrl', ap.logo_url
-             ),
-             'externalId', po.external_id,
-             'price', po.price,
-             'originalPrice', po.original_price,
-             'currency', po.currency,
-             'stockUnits', po.stock_units,
-             'availability', po.availability,
-             'commissionRate', po.commission_rate,
-             'sellerName', po.seller_name,
-             'isFreeShipping', po.is_free_shipping,
-             'isFastShipping', po.is_fast_shipping,
-             'syncStatus', po.sync_status,
-             'lastSyncedAt', po.last_synced_at
-           ) ORDER BY po.price NULLS LAST, ap.name)
-           FROM product_offers po
-           LEFT JOIN affiliate_platforms ap ON ap.id = po.platform_id
-           WHERE po.product_id = p.id
-             AND po.is_active = TRUE
-             AND (po.platform_id IS NULL OR ap.is_active = TRUE)
+           SELECT json_agg(json_build_object('id', po.id, 'offerType', po.offer_type, 'platform', json_build_object('code', ap.code, 'name', ap.name, 'logoUrl', ap.logo_url), 'externalId', po.external_id, 'price', po.price, 'originalPrice', po.original_price, 'currency', po.currency, 'stockUnits', po.stock_units, 'availability', po.availability, 'commissionRate', po.commission_rate, 'sellerName', po.seller_name, 'isFreeShipping', po.is_free_shipping, 'isFastShipping', po.is_fast_shipping, 'syncStatus', po.sync_status, 'lastSyncedAt', po.last_synced_at) ORDER BY po.price NULLS LAST, ap.name)
+           FROM product_offers po LEFT JOIN affiliate_platforms ap ON ap.id = po.platform_id WHERE po.product_id = p.id AND po.is_active = TRUE AND (po.platform_id IS NULL OR ap.is_active = TRUE)
          ), '[]'::json) AS offers
-       FROM products p
-       WHERE p.id = $1
-         AND p.status = 'ativo'
-       LIMIT 1`,
+       FROM products p WHERE p.id = $1 AND p.status = 'ativo' LIMIT 1`,
       [req.params.id]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Produto não encontrado.' });
-    }
-
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Produto não encontrado.' });
     res.json({ product: result.rows[0] });
   } catch (err) {
     console.error('Erro ao buscar produto do catálogo:', err);
@@ -221,17 +165,9 @@ router.get('/products/:id', async (req, res) => {
   }
 });
 
-// GET /api/catalog/platforms
-// Lista as plataformas afiliadas ativas para o frontend montar os filtros.
 router.get('/platforms', async (_req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT code, name, logo_url AS "logoUrl", website_url AS "websiteUrl"
-       FROM affiliate_platforms
-       WHERE is_active = TRUE
-       ORDER BY name`
-    );
-
+    const result = await pool.query(`SELECT code, name, logo_url AS "logoUrl", website_url AS "websiteUrl" FROM affiliate_platforms WHERE is_active = TRUE ORDER BY name`);
     res.json({ platforms: result.rows });
   } catch (err) {
     console.error('Erro ao buscar plataformas do catálogo:', err);
@@ -239,56 +175,10 @@ router.get('/platforms', async (_req, res) => {
   }
 });
 
-// Cada plataforma só libera links do seu próprio domínio de afiliado.
 function validateStoredAffiliateLink(value, platformCode) {
-  const validate = platformCode === 'shopee'
-    ? affiliateLink
-    : platformCode === 'shein'
-      ? sheinAffiliateLink
-      : null;
-  if (!validate) throw new Error('Plataforma de afiliado não permitida.');
-  return validate(value);function validateStoredAffiliateLink(value, platformCode) {
-  const validate = platformCode === 'shopee'
-    ? affiliateLink
-    : platformCode === 'shein'
-      ? sheinAffiliateLink
-      : platformCode === 'aliexpress'
-        ? aliexpressAffiliateLink
-      : null;
-  if (!validate) throw new Error('Plataforma de afiliado não permitida.');
+  const validate = platformCode === 'shopee' ? affiliateLink : platformCode === 'shein' ? sheinAffiliateLink : null;
+  if (!validate) throw new Error('Plataforma de afiliado não permitida');
   return validate(value);
 }
 
-function aliexpressAffiliateLink(value) {
-  const url = new URL(value);
-  const allowed = ['aliexpress.com', 'aliexpress.us', 'aliexpress.ru', 'aliexpress.com.br'];
-  if (url.protocol !== 'https:' || url.username || url.password || url.port ||
-      !allowed.some((host) => url.hostname === host || url.hostname.endsWith(`.\${host}`))) {
-    throw new Error('Use um link HTTPS de afiliado do AliExpress.');
-  }
-  return url.href;
-}
-}
-
-// Link de compra: exige sessão e usa exclusivamente a oferta ativa armazenada.
-router.get('/offers/:id/go', requireAuth, async (req, res) => {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
-    return res.status(400).json({ error: 'ID de oferta inválido.' });
-  }
-  try {
-    const result = await pool.query(`SELECT po.affiliate_url, ap.code AS platform_code FROM product_offers po
-      JOIN affiliate_platforms ap ON ap.id=po.platform_id
-      JOIN products p ON p.id=po.product_id
-      WHERE po.id=$1 AND po.is_active=TRUE AND ap.is_active=TRUE
-        AND ap.code IN ('shopee','shein','aliexpress') AND p.status='ativo' AND po.offer_type='afiliada'`, [req.params.id]);
-    if (!result.rows[0]?.affiliate_url) return res.status(404).json({ error: 'Oferta indisponível.' });
-    const link = validateStoredAffiliateLink(result.rows[0].affiliate_url, result.rows[0].platform_code);
-    res.set('Cache-Control', 'no-store');
-    return res.json({ redirectUrl: link });
-  } catch {
-    return res.status(503).json({ error: 'Não foi possível abrir a oferta.' });
-  }
-});
-
 export default router;
-
