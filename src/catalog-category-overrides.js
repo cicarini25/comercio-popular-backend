@@ -69,7 +69,7 @@ const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
   'fio eletrico': 'ELÉTRICA & HIDRÁULICA'
 };
 
-export function corrigirCategoriaDoProdutoGeral(produto) {
+function corrigirCategoriaDoProdutoGeral(produto) {
   if (!produto || !produto.title) return produto;
 
   const tituloLimpo = produto.title
@@ -90,5 +90,9 @@ export function corrigirCategoriaDoProdutoGeral(produto) {
 const ACCESSORY_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
 const COMPLETE_APPLIANCE_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
 
-
-export { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS, MAPEAMENTO_GERAL_DE_CATEGORIAS };
+export { 
+  ACCESSORY_TITLE_PATTERNS, 
+  COMPLETE_APPLIANCE_TITLE_PATTERNS, 
+  MAPEAMENTO_GERAL_DE_CATEGORIAS,
+  corrigirCategoriaDoProdutoGeral 
+};
