@@ -87,7 +87,8 @@ export function corrigirCategoriaDoProdutoGeral(produto) {
   return produto;
 }
 
-const ACCESSORY_TITLE_PATTERNS = [];
-const COMPLETE_APPLIANCE_TITLE_PATTERNS = [];
+const ACCESSORY_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
+const COMPLETE_APPLIANCE_TITLE_PATTERNS = ['%termo_inativo_padrao%'];
+
 
 export { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS, MAPEAMENTO_GERAL_DE_CATEGORIAS };
