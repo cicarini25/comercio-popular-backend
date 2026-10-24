@@ -1,74 +1,93 @@
-const ACCESSORY_TITLES = [
-  'Eletrobomba Bomba De Agua Maquina De Lavar Electrolux 15kg 127v',
-  'Eletrobomba Bomba De Agua Maquina De Lavar Electrolux 15kg',
-  'Display Microondas Pme31 Micro-ondas Yh-ml07bs-08 Ylc070amb-v0',
-  'Diodo Alta Tensão CL04-12A Forno Microondas Micro-ondas LG Conexão PTH 12Kv 450Ma 6851W1A002K',
-  'Detector de Micro-ondas, Detector de Vazamento de Micro-Ondas com Display Digital LCD, Função de Alarme Integrada, Medida',
-  'Capacitor Microondas 0.80uf X 2100v Alta Tensão Para Microondas',
-  'SEIS 6 Capacitor Microondas Alta Qualidade 0,80uf 2000v Fusível 20a JRK MICROONDAS',
-  'Batedor Tanquinho Suggar Lavamax Eco 10kg 12kg 13kg 15kg 18Kg 20Kg Kit Completo',
-  'BUCHA DO AGITADOR ORIGINAL LAVADORA COLORMAQ 11-12-15kg',
-  'Usina 5 Saidas Original Fogão Brastemp E Consul W10362642',
-  'Usina 5 Saídas Acendedor Fogão Brastemp Consul W10362642 Módulo Ignição Original',
-  'ACENDEDOR FOGAO FLAME',
-  'DOIS 2 Kit Lâmpada Halógena G9 Fogões Fornos 25w 220v Electrolux',
-  'DOIS 2 Conj Eletroldo Fogão/cooktop Brastemp/consul 4 E 5 Bocas',
-  'Usina de Acendimento Automático Fogão Cooktop Brastemp Consul 4 Bocas Bdd62 Cd060',
-  'Interruptor Original Do Fogão Brastemp Ative W10343716',
-  'Usina 7 Saidas Acendimento Fogao Brastemp Consul Terminal',
-  'Conjunto Eletroldo Fogão/cooktop Brastemp 4 e 5 Bocas',
-  'Usina 6 Saidas Acendimento Fogao Brastemp 5 Bocas',
-  'Usina De Ignição Original Fogão Brastemp E Consul 5 Saídas',
-  // Componentes observados na resposta de produção como Eletrodomésticos.
-  'Agitador Batedor Tanquinho Colormaq 12/13/15kg Completo',
-  '1.2 UF novo capacitor de forno de microondas Bicai CH85 capacitor de alta tensão',
-  'KIT AGITADOR BATEDOR 8 BLADES 8 PÁS P/ LAVADORA BRASTEMP/CONSUL',
-  'Tirante Lavadora Brastemp 7kg A 11kg 4 Peças',
-  'Pressostato Lavadora Roupas Consul Facilite Cwe11 Cwe10',
-  'Capacitor Maquina de Lavar 45uf 127v Para Lavadora Roupas Electrolux',
-  'Banda Cinta do Freio Lavadora Maquina de Lavar Brastemp Consul',
-  'Eletrobomba Bomba Drenagem 127v Lavadora Electrolux Lt12b',
-  'AGITADOR 8 BLADES 8 PÁS P/ LAVADORA BRASTEMP/CONSUL',
-  'Agitador Batedor Lavadora Electrolux Lt15f',
-  'AGITADOR COMPLETO 8 PÁS 8 BLADES LAVADORA BRASTEMP/CONSUL',
-  'Pressostato Lavadora Consul Facilite Cws11 Cwg12',
-  'Micro Chave Lavadora Brastemp Bwc10a',
-  'Kit 4 Molas Vara De Suspensão Lavadora Electrolux',
-  'Kit 4 Molas Tirante Vara De Suspensão maquina de lavar Lavadora Electrolux',
-  'Kit 20/40 Molas Tirante Vara De Suspensão Maquina Lavar Lavadora Electrolux',
-  'Kit 8 Tirantes Maquina De Lavar Eletrônica',
-  'Kit Bucha e Retentor Tanquinho Colormaq',
-  'Kit Mica Micro-ondas 14x14cm',
-  'Kit Chave de Segurança Porta Micro-ondas 16A',
-  'Kit Vedação Retentor Bucha Agitador Tanquinho',
-  'MOTOR PRATO P/ MICROONDAS',
-  'MOTOR GIRA PRATO MICROONDAS',
-  'Membrana Teclado Microondas LG',
-  'Membrana Teclado Microondas Electrolux',
-  'Membrana do Painel Máquina de Lavar Brastemp',
-  'Polia Agitador Tanquinho Colormaq',
-  'Saca Agitador Brastemp',
-  'Tirante de Suspensão Máquina de Lavar Electrolux',
-  'Forno de microondas pé almofada forno microondas alta Base fogão indução',
-];
+const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
+  'notebook': 'Notebook',
+  'laptop': 'Notebook',
+  'macbook': 'Notebook',
+  'pc gamer': 'Computadores',
+  'computador gamer': 'Computadores',
+  'computador completo': 'Computadores',
+  'desktop': 'Computadores',
+  'cpu gamer': 'Computadores',
+  'intel core': 'Computadores',
+  'ryzen': 'Computadores',
+  'gabinete rgb': 'Computadores',
+  'ssd nvme': 'Computadores',
+  'memoria ram': 'Computadores',
+  'placa de video': 'Computadores',
+  'monitor led': 'Computadores',
+  'playstation': 'Games',
+  'xbox': 'Games',
+  'nintendo switch': 'Games',
+  'controle gamer': 'Games',
+  'smartphone': 'Smartphones',
+  'celular': 'Smartphones',
+  'iphone': 'Smartphones',
+  'carregador de celular': 'Acessórios para celulares',
+  'capinha': 'Acessórios para celulares',
+  'pelicula': 'Acessórios para celulares',
+  'fone bluetooth': 'Fones & Headphones',
+  'headset': 'Fones & Headphones',
+  'fone de ouvido': 'Fones & Headphones',
+  'caixa de som': 'Aparelhos de Som',
+  'subwoofer': 'Aparelhos de Som',
+  'caixa amplificada': 'Aparelhos de Som',
+  'amplificador de audio': 'ELETRÔNICOS',
+  'placa amplificadora': 'ELETRÔNICOS',
+  'modulo de potencia': 'ELETRÔNICOS',
+  'chip de audio': 'ELETRÔNICOS',
+  'sensor de contato': 'ELETRÔNICOS',
+  'tda7388': 'ELETRÔNICOS',
+  'bomba de agua maq': 'ELETRO & ACESSÓRIOS',
+  'eletrobomba': 'ELETRO & ACESSÓRIOS',
+  'capacitor de microondas': 'ELETRO & ACESSÓRIOS',
+  'batedor tanquinho': 'ELETRO & ACESSÓRIOS',
+  'espalhador': 'ELETRO & ACESSÓRIOS',
+  'queimador': 'ELETRO & ACESSÓRIOS',
+  'espalha chama': 'ELETRO & ACESSÓRIOS',
+  'kit 4 bocal': 'ELETRO & ACESSÓRIOS',
+  'boca de fogao': 'ELETRO & ACESSÓRIOS',
+  'boca fogao': 'ELETRO & ACESSÓRIOS',
+  'smart tv': 'TVs',
+  'televisao': 'TVs',
+  'instrumento musical': 'Instrumentos Musicais',
+  'violao': 'Instrumentos Musicais',
+  'guitarra': 'Instrumentos Musicais',
+  'teclado musical': 'Instrumentos Musicais',
+  'smartwatch': 'RELÓGIOS',
+  'relogio masculino': 'RELÓGIOS',
+  'relogio feminino': 'RELÓGIOS',
+  'fogao cooktop': 'Eletrodomésticos',
+  'fogao 4 bocas': 'Eletrodomésticos',
+  'fogao 5 bocas': 'Eletrodomésticos',
+  'maquina de lavar': 'Eletrodomésticos',
+  'micro-ondas': 'Eletrodomésticos',
+  'guarda-roupa': 'Móveis',
+  'comoda': 'Móveis',
+  'luminaria': 'LUMINÁRIAS',
+  'mochila': 'BOLSAS & MOCHILAS',
+  'furadeira': 'Ferramentas',
+  'impressora 3d': 'MÁQUINAS & IMPRESSORAS',
+  'fio eletrico': 'ELÉTRICA & HIDRÁULICA'
+};
 
-const COMPLETE_APPLIANCE_TITLES = [
-  'Tanquinho Britânia 15kg Semi Automático BLT15A',
-  'Máquina de lavar 12Kg Philco 16 Modos de operação PLR12A',
-  'Máquina de Lavar Roupa Midea 12kg Sistema Wave Impeller e Compacta Branca',
-  'Máquina de Lavar Midea MA512W150A-WK05 15kg Automática Branca Abertura Superior',
-  'Máquina de Lavar Brastemp 15kg Automática Cesto Inox Multi Dispenser BWF15AB',
-  'Máquina De Lavar 12kg Branca Wave Impeller Midea MAV04W120/WKBR04',
-  'Mini máquina de lavar roupa 11L dobrável portátil moderna máquina de lavar automática',
-  'Micro-Ondas Mondial 21 Litros MO-01-21-B Preto 1200W Display Digital',
-  'Maquina de Lavar Midea Wave Agitador 15KG 13 programas com Timer Digital',
-  'Fogão a Gás 4 Bocas Inox Embutir',
-  'Fogão Itatiaia Star New 4 Bocas Com Acendimento Automático',
-];
+export function corrigirCategoriaDoProdutoGeral(produto) {
+  if (!produto || !produto.title) return produto;
 
-export const ACCESSORY_TITLE_KEYS = ACCESSORY_TITLES.map((title) => title.toLocaleLowerCase('pt-BR'));
-export const ACCESSORY_TITLE_PATTERNS = ACCESSORY_TITLE_KEYS.map((title) => `${title}%`);
-export const COMPLETE_APPLIANCE_TITLE_KEYS = COMPLETE_APPLIANCE_TITLES.map((title) => title.toLocaleLowerCase('pt-BR'));
-export const COMPLETE_APPLIANCE_TITLE_PATTERNS = COMPLETE_APPLIANCE_TITLE_KEYS.map((title) => `${title}%`);
+  const tituloLimpo = produto.title
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
-export { ACCESSORY_TITLES, COMPLETE_APPLIANCE_TITLES };
+  for (const [termoChave, categoriaCorreta] of Object.entries(MAPEAMENTO_GERAL_DE_CATEGORIAS)) {
+    if (tituloLimpo.includes(termoChave)) {
+      produto.category = categoriaCorreta;
+      return produto;
+    }
+  }
+
+  return produto;
+}
+
+const ACCESSORY_TITLE_PATTERNS = [];
+const COMPLETE_APPLIANCE_TITLE_PATTERNS = [];
+
+export { ACCESSORY_TITLE_PATTERNS, COMPLETE_APPLIANCE_TITLE_PATTERNS, MAPEAMENTO_GERAL_DE_CATEGORIAS };
