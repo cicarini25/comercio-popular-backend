@@ -10,6 +10,7 @@ import { importAliExpressProducts, MAX_IMPORT_ITEMS as MAX_ALIEXPRESS_IMPORT_ITE
 import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
 import { resolveShopeeImages } from "../integrations/shopee/image-resolver.js";
 import { getShopeeSuggestedCategorySignals, normalizeShopeeSiteCategory, resolveShopeeSiteCategory } from "../integrations/shopee/category-resolver.js";
+import { SITE_CATEGORIES } from "../integrations/core/site-category-resolver.js";
 import {
   buildMercadoLivreAuthorizationUrl,
   createMercadoLivreOAuthState,
@@ -762,16 +763,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin, async (req, res) => {
   const jobPrefix = typeof req.body?.jobPrefix === "string" ? req.body.jobPrefix.trim() : "";
   const targetCategory = typeof req.body?.targetCategory === "string" ? req.body.targetCategory.trim() : "";
-  const allowedCategories = new Set([
-    "Casa & Cozinha", "Casa & Cozinha", "Ferramentas", "Eletrodomésticos",
-    "ELETRO & ACESSÓRIOS", "Móveis", "ELETRÔNICOS", "RELÓGIOS", "Games",
-    "Informática", "Informática", "Smartphones", "Acessórios para celulares",
-    "Aparelhos de Som", "Fones & Headphones", "Instrumentos Musicais",
-    "AUTO & ACESSÓRIOS", "MOTOS & ACESSÓRIOS", "Pets", "Moda Masculina",
-    "Moda Feminina", "Moda Infantil", "ARMARINHOS & TRICÔ", "Brinquedos",
-    "TVs", "Calçados", "Esportes & Lazer", "Bike Elétrica e Acessórios",
-    "Cuidado & Beleza", "Alimentos & Bebidas", "MÁQUINAS & IMPRESSORAS"
-  ]);
+  const allowedCategories = new Set(SITE_CATEGORIES);
   if (!/^[a-f0-9]{8}$/i.test(jobPrefix)) {
     return res.status(400).json({ error: "Informe os 8 primeiros caracteres do ID do lote." });
   }
@@ -914,7 +906,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
              WHEN lower(p.title) LIKE '%luminária%'
                OR lower(p.title) LIKE '%luminaria%'
                OR lower(p.title) LIKE '%abajur%'
-               THEN 'Casa & Cozinha'
+               THEN 'LUMINÁRIAS'
              WHEN (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
                AND lower(p.title) LIKE '%controle%remoto%'
                THEN 'Brinquedos'
@@ -976,7 +968,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
         WHERE ci.job_id = $1
           AND ci.product_id = p.id
           AND (
-            p.category = 'Casa & Cozinha' AND (
+            p.category = 'LUMINÁRIAS' AND (
               lower(p.title) LIKE '%luminária%'
               OR lower(p.title) LIKE '%luminaria%'
               OR lower(p.title) LIKE '%abajur%'
@@ -989,13 +981,13 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
     );
 
     await client.query("COMMIT");
-    const utilidades = updated.rows.filter((row) => row.category === "Casa & Cozinha").length;
+    const luminarias = updated.rows.filter((row) => row.category === "LUMINÁRIAS").length;
     const brinquedos = updated.rows.filter((row) => row.category === "Brinquedos").length;
     return res.json({
       ok: true,
       jobPrefix,
       updatedCount: updated.rows.length,
-      utilidades,
+      luminarias,
       brinquedos,
       changed: updated.rows
     });
@@ -1880,4 +1872,5 @@ router.post("/shopee/reclassify-misplaced-pet-products", requireIntegrationAdmin
 });
 
 export default router;
+
 

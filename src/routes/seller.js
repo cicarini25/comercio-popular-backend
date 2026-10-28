@@ -10,7 +10,7 @@ const router = express.Router();
 
 const PLAN_LIMITS = { iniciante: 25, pro: Infinity, empresa: Infinity };
 const VIDEO_LIMIT_BYTES = 20 * 1024 * 1024;
-const VIDEO_STORAGE_DIR = process.env.PRODUCT_VIDEO_STORAGE_DIR || '/data/product-videos';
+const VIDEO_STORAGE_DIR = process.env.PRODUCT_VIDEO_STORAGE_DIR || '/data/shopee-images/product-videos';
 const VIDEO_PUBLIC_PREFIX = '/product-media/videos/';
 
 async function findActiveSeller(userId) {
@@ -266,5 +266,6 @@ router.patch('/orders/:id', async (req, res) => {
 });
 
 export default router;
+
 
 
