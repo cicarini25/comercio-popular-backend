@@ -244,3 +244,4 @@ function formatAliExpressTimestamp(date = new Date()) {
 }
 
 export { DEFAULT_ENDPOINT, MAX_PAGE_SIZE, extractAffiliateResult, extractAffiliateEnvelope, formatAliExpressTimestamp };
+

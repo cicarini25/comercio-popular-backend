@@ -1,4 +1,5 @@
 import pool from '../../db/pool.js';
+import { resolveSiteCategory } from '../core/site-category-resolver.js';
 
 export const MAX_SYNC_ITEMS = 200;
 
@@ -109,13 +110,28 @@ export function normalizeSheinItem(row, { requireAffiliateLink = true } = {}) {
     throw new Error(`Item ${id}: link de afiliado ausente.`);
   }
 
+  const description = String(firstFilled(row.description, row.descricao) ?? '').slice(0, 50000);
+  const rawVideo = row.video_url ?? row.videoUrl ?? row.video_link ?? row.video?.url ?? row.video?.video_url;
+  let videoUrl = null;
+  if (rawVideo) {
+    try {
+      const video = new URL(String(rawVideo).trim());
+      if (video.protocol !== 'https:' || video.username || video.password || video.port || video.href.length > 2000) throw new Error();
+      videoUrl = video.href;
+    } catch {
+      throw new Error("Item " + id + ": vídeo inválido; use um endereço HTTPS válido.");
+    }
+  }
+  const category = resolveSiteCategory({ category: firstFilled(row.category, row.categoria), title, description });
+
   return {
     id,
     title,
     price,
     originalPrice: original > price ? original : null,
-    description: String(firstFilled(row.description, row.descricao) ?? '').slice(0, 50000),
-    category: String(firstFilled(row.category, row.categoria) ?? 'SHEIN').slice(0, 100),
+    description,
+    category,
+    videoUrl,
     seller: 'SHEIN',
     image: image.href,
     productUrl,
@@ -152,24 +168,26 @@ export async function upsertSheinProducts(products, db = pool) {
     const platform = await client.query("SELECT id FROM affiliate_platforms WHERE code='shein' AND is_active=TRUE LIMIT 1");
     if (!platform.rows[0]) throw new Error('Plataforma SHEIN não cadastrada ou inativa. Execute a migração (npm run migrate).');
     const platformId = platform.rows[0].id;
+    const existingRows = await client.query('SELECT id, product_id, external_id FROM product_offers WHERE platform_id=$1 AND external_id = ANY($2::text[])', [platformId, products.map((product) => product.id)]);
+    const existingByExternalId = new Map(existingRows.rows.map((row) => [row.external_id, row]));
     const offers = [];
 
     for (const p of products) {
-      const existing = await client.query('SELECT id, product_id FROM product_offers WHERE platform_id=$1 AND external_id=$2', [platformId, p.id]);
-      let productId = existing.rows[0]?.product_id;
-      const metadata = JSON.stringify({ importedFrom: 'shein-feed', availabilityKnown: false });
+      const existing = existingByExternalId.get(p.id);
+      let productId = existing?.product_id;
+      const metadata = JSON.stringify({ importedFrom: 'shein-feed', availabilityKnown: false, videoUrl: p.videoUrl || null });
 
       if (productId) {
         await client.query(`UPDATE products SET title=$1, description=$2, price=$3, image_url=COALESCE($4,image_url),
-          category=$5, affiliate_link=$6, metadata=COALESCE(metadata,'{}'::jsonb)||$7::jsonb,
-          updated_at=now() WHERE id=$8 AND source='shein'`,
-        [p.title, p.description, p.price, p.image, p.category, p.affiliateUrl, metadata, productId]);
+          category=$5, video_url=COALESCE($6,video_url), affiliate_link=$7, metadata=COALESCE(metadata,'{}'::jsonb)||$8::jsonb,
+          updated_at=now() WHERE id=$9 AND source='shein'`,
+        [p.title, p.description, p.price, p.image, p.category, p.videoUrl, p.affiliateUrl, metadata, productId]);
       } else {
         const inserted = await client.query(`INSERT INTO products
-          (source, external_id, title, description, price, image_url, category, affiliate_link,
+          (source, external_id, title, description, price, image_url, category, video_url, affiliate_link,
            stock_units, product_kind, status, metadata)
-          VALUES ('shein',$1,$2,$3,$4,$5,$6,$7,NULL,'afiliado','ativo',$8::jsonb) RETURNING id`,
-        [p.id, p.title, p.description, p.price, p.image, p.category, p.affiliateUrl, metadata]);
+          VALUES ('shein',$1,$2,$3,$4,$5,$6,$7,$8,NULL,'afiliado','ativo',$9::jsonb) RETURNING id`,
+        [p.id, p.title, p.description, p.price, p.image, p.category, p.videoUrl, p.affiliateUrl, metadata]);
         productId = inserted.rows[0].id;
       }
 
@@ -189,7 +207,7 @@ export async function upsertSheinProducts(products, db = pool) {
         itemId: p.id,
         productId,
         offerId: offer.rows[0].id,
-        action: existing.rows.length ? 'updated' : 'imported',
+        action: existing ? 'updated' : 'imported',
         buyPath: `/api/catalog/offers/${offer.rows[0].id}/go`
       });
     }
@@ -212,3 +230,4 @@ export async function importSheinFeed({ items, dryRun = true }, db = pool) {
   const result = await upsertSheinProducts(products, db);
   return { dryRun: false, ...result };
 }
+

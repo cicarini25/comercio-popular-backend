@@ -70,6 +70,18 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
 
   const selectedCategory = typeof row.categoryOverride === 'string' ? row.categoryOverride.trim() : '';
   if (selectedCategory.length > 100) throw new Error(`Item ${id}: categoria de destino inválida.`);
+  const videoRaw = row.video_url ?? row.videoUrl ??
+    (typeof row.video === 'string' ? row.video : row.video?.url ?? row.video?.video_url);
+  let videoUrl = null;
+  if (videoRaw) {
+    try {
+      const video = new URL(String(videoRaw).trim());
+      if (video.protocol !== 'https:' || video.username || video.password || video.href.length > 2000) throw new Error();
+      videoUrl = video.href;
+    } catch {
+      throw new Error('Item ' + id + ': vídeo inválido; use um endereço HTTPS fornecido pela plataforma.');
+    }
+  }
   const description = String(row.description ?? '').slice(0, 50000);
   const sourceCategory = row.global_category1 ?? row.category ?? '';
   const resolvedCategory = resolveShopeeSiteCategory({
@@ -93,6 +105,7 @@ export function normalizeFeedItem(row, { requireAffiliateLink = true } = {}) {
     categoryOverride: resolvedCategory || normalizedSelectedCategory || null,
     seller: String(row.shop_name ?? row.shopName ?? '').slice(0, 180),
     image: image.href,
+    videoUrl,
     productUrl: product.href,
     affiliateUrl,
     shopId: match[1]
@@ -128,24 +141,26 @@ export async function upsertShopeeProducts(products, db = pool) {
     const platform = await client.query("SELECT id FROM affiliate_platforms WHERE code='shopee' AND is_active=TRUE LIMIT 1");
     if (!platform.rows[0]) throw new Error('Plataforma Shopee não cadastrada ou inativa. Execute a migração existente e confira a configuração.');
     const platformId = platform.rows[0].id;
+    const existingRows = await client.query('SELECT id, product_id, external_id FROM product_offers WHERE platform_id=$1 AND external_id = ANY($2::text[])', [platformId, products.map((product) => product.id)]);
+    const existingByExternalId = new Map(existingRows.rows.map((row) => [row.external_id, row]));
     const offers = [];
 
     for (const p of products) {
-      const existing = await client.query('SELECT id, product_id FROM product_offers WHERE platform_id=$1 AND external_id=$2', [platformId, p.id]);
-      let productId = existing.rows[0]?.product_id;
-      const metadata = JSON.stringify({ importedFrom: 'shopee-feed', shopId: p.shopId, availabilityKnown: false, categoryOverride: p.categoryOverride || null });
+      const existing = existingByExternalId.get(p.id);
+      let productId = existing?.product_id;
+      const metadata = JSON.stringify({ importedFrom: 'shopee-feed', shopId: p.shopId, availabilityKnown: false, categoryOverride: p.categoryOverride || null, videoUrl: p.videoUrl || null });
 
       if (productId) {
         await client.query(`UPDATE products SET title=$1, description=$2, price=$3, image_url=COALESCE($4,image_url),
-          category=$5, affiliate_link=$6, metadata=COALESCE(metadata,'{}'::jsonb)||$7::jsonb,
-          updated_at=now() WHERE id=$8 AND source='shopee'`,
-        [p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,metadata,productId]);
+          category=$5, affiliate_link=$6, video_url=COALESCE($7,video_url), metadata=COALESCE(metadata,'{}'::jsonb)||$8::jsonb,
+          updated_at=now() WHERE id=$9 AND source='shopee'`,
+        [p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,p.videoUrl,metadata,productId]);
       } else {
         const inserted = await client.query(`INSERT INTO products
-          (source, external_id, title, description, price, image_url, category, affiliate_link,
+          (source, external_id, title, description, price, image_url, category, affiliate_link, video_url,
            stock_units, product_kind, status, metadata)
-          VALUES ('shopee',$1,$2,$3,$4,$5,$6,$7,NULL,'afiliado','ativo',$8::jsonb) RETURNING id`,
-        [p.id,p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,metadata]);
+          VALUES ('shopee',$1,$2,$3,$4,$5,$6,$7,$8,NULL,'afiliado','ativo',$9::jsonb) RETURNING id`,
+        [p.id,p.title,p.description,p.price,p.image,p.category,p.affiliateUrl,p.videoUrl,metadata]);
         productId = inserted.rows[0].id;
       }
 
@@ -154,7 +169,7 @@ export async function upsertShopeeProducts(products, db = pool) {
          currency,stock_units,availability,seller_name,sync_status,last_synced_at,metadata)
         VALUES ($1,$2,$3,'afiliada',$4,$5,$6,$7,'BRL',NULL,'desconhecida',$8,'feed',now(),$9::jsonb)
         ON CONFLICT (platform_id,external_id) WHERE external_id IS NOT NULL
-        DO UPDATE SET product_url=EXCLUDED.product_url,affiliate_url=EXCLUDED.affiliate_url,
+        DO UPDATE SET is_active=TRUE,product_url=EXCLUDED.product_url,affiliate_url=EXCLUDED.affiliate_url,
           price=EXCLUDED.price,original_price=EXCLUDED.original_price,stock_units=NULL,
           availability='desconhecida',seller_name=EXCLUDED.seller_name,sync_status='feed',
           last_synced_at=now(),updated_at=now(),metadata=EXCLUDED.metadata
@@ -165,7 +180,7 @@ export async function upsertShopeeProducts(products, db = pool) {
         itemId: p.id,
         productId,
         offerId: offer.rows[0].id,
-        action: existing.rows.length ? 'updated' : 'imported',
+        action: existing ? 'updated' : 'imported',
         buyPath: `/api/catalog/offers/${offer.rows[0].id}/go`
       });
     }
@@ -188,3 +203,4 @@ export async function importShopeeFeed({ items, dryRun = true }, db = pool) {
   const result = await upsertShopeeProducts(products, db);
   return { dryRun: false, ...result };
 }
+
