@@ -195,3 +195,4 @@ run().catch((error) => {
   console.error("Shopee worker erro fatal:", error);
   process.exit(1);
 });
+

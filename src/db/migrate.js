@@ -19,3 +19,4 @@ migrate().catch((err) => {
   console.error('Erro ao migrar banco de dados:', err);
   process.exit(1);
 });
+

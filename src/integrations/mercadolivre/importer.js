@@ -2,6 +2,7 @@ import pool from "../../db/pool.js";
 import { MercadoLivreConnector } from "./client.js";
 import { buildNormalizedProduct } from "../core/normalizer.js";
 import { getMercadoLivreAccessToken } from "./oauth.js";
+import { resolveSiteCategory } from "../core/site-category-resolver.js";
 import {
   buildCatalogCanonicalKey,
   findCatalogMatchCandidates,
@@ -138,7 +139,12 @@ export async function importMercadoLivreProducts({
 
     const affiliateUrl = affiliateLinks.get(normalized.externalId) ?? null;
     const normalizedIdentity = buildNormalizedProduct(normalized);
-    const category = categoryOverride?.trim() || normalized.category || "Mercado Livre";
+    const category = resolveSiteCategory({
+      category: normalized.category,
+      title: normalized.title,
+      description: normalized.description,
+      categoryOverride
+    });
     const source = "mercadolivre";
 
     const existingOffer = await pool.query(
@@ -377,3 +383,4 @@ export async function importMercadoLivreProducts({
     skipped
   };
 }
+

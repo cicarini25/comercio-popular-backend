@@ -440,3 +440,4 @@ if (process.argv[1]?.endsWith("/worker.js")) {
     process.exit(1);
   });
 }
+

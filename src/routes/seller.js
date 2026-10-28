@@ -1,10 +1,17 @@
 import express from 'express';
+import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
+import { SITE_CATEGORIES } from '../integrations/core/site-category-resolver.js';
 
 const router = express.Router();
 
 const PLAN_LIMITS = { iniciante: 25, pro: Infinity, empresa: Infinity };
+const VIDEO_LIMIT_BYTES = 20 * 1024 * 1024;
+const VIDEO_STORAGE_DIR = process.env.PRODUCT_VIDEO_STORAGE_DIR || '/data/product-videos';
+const VIDEO_PUBLIC_PREFIX = '/product-media/videos/';
 
 async function findActiveSeller(userId) {
   const result = await pool.query(
@@ -44,6 +51,7 @@ function normalizeProduct(row) {
     stockUnits: Number(row.stock_units || 0),
     category: row.category || 'Outros',
     imageUrl: row.image_url || '',
+    videoUrl: row.video_url || '',
     status: row.status || 'ativo',
     createdAt: row.created_at,
   };
@@ -55,7 +63,7 @@ router.get('/dashboard', async (req, res) => {
   try {
     const [products, orders, metrics] = await Promise.all([
       pool.query(
-        `SELECT id, title, description, price, stock_units, category, image_url, status, created_at
+        `SELECT id, title, description, price, stock_units, category, image_url, video_url, status, created_at
            FROM products WHERE seller_id = $1 AND source = 'proprio'
           ORDER BY created_at DESC`,
         [req.seller.id],
@@ -103,6 +111,68 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
+router.post('/products/:id/video',
+  async (req, res, next) => {
+    try {
+      const product = await pool.query(
+        "SELECT id, video_url FROM products WHERE id = $1 AND seller_id = $2 AND source = 'proprio' LIMIT 1",
+        [req.params.id, req.seller.id],
+      );
+      if (!product.rows[0]) return res.status(404).json({ error: 'Produto não encontrado para esta loja.' });
+      req.product = product.rows[0];
+      return next();
+    } catch (error) {
+      console.error('Erro ao validar produto para vídeo:', error);
+      return res.status(500).json({ error: 'Não foi possível validar o produto.' });
+    }
+  },
+  express.raw({ type: ['video/mp4', 'video/webm'], limit: '20mb' }),
+  async (req, res) => {
+    const mimeType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+    const file = req.body;
+    if (!Buffer.isBuffer(file) || file.length === 0) {
+      return res.status(415).json({ error: 'Envie um arquivo MP4 ou WebM.' });
+    }
+    if (file.length > VIDEO_LIMIT_BYTES) {
+      return res.status(413).json({ error: 'O vídeo deve ter no máximo 20 MB.' });
+    }
+    const isMp4 = mimeType === 'video/mp4' && file.length > 12 && file.subarray(4, 8).toString('ascii') === 'ftyp';
+    const isWebm = mimeType === 'video/webm' && file.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+    if (!isMp4 && !isWebm) {
+      return res.status(415).json({ error: 'O conteúdo não corresponde a um vídeo MP4 ou WebM válido.' });
+    }
+
+    const extension = isMp4 ? 'mp4' : 'webm';
+    const fileName = randomUUID() + '.' + extension;
+    const filePath = path.join(VIDEO_STORAGE_DIR, fileName);
+    try {
+      await mkdir(VIDEO_STORAGE_DIR, { recursive: true });
+      await writeFile(filePath, file, { flag: 'wx' });
+      const videoUrl = VIDEO_PUBLIC_PREFIX + fileName;
+      const updated = await pool.query(
+        "UPDATE products SET video_url = $1, updated_at = now() WHERE id = $2 AND seller_id = $3 AND source = 'proprio' RETURNING id, title, description, price, stock_units, category, image_url, video_url, status, created_at",
+        [videoUrl, req.product.id, req.seller.id],
+      );
+      if (!updated.rows[0]) {
+        await unlink(filePath).catch(() => {});
+        return res.status(404).json({ error: 'Produto não encontrado para esta loja.' });
+      }
+
+      const oldVideo = req.product.video_url;
+      if (typeof oldVideo === 'string' && oldVideo.startsWith(VIDEO_PUBLIC_PREFIX)) {
+        const oldFileName = path.basename(oldVideo);
+        if (/^[a-f0-9-]+\.(mp4|webm)$/i.test(oldFileName) && oldFileName !== fileName) {
+          await unlink(path.join(VIDEO_STORAGE_DIR, oldFileName)).catch(() => {});
+        }
+      }
+      return res.json({ product: normalizeProduct(updated.rows[0]) });
+    } catch (error) {
+      await unlink(filePath).catch(() => {});
+      console.error('Erro ao armazenar vídeo do produto:', error);
+      return res.status(500).json({ error: 'Não foi possível armazenar o vídeo. Confirme o armazenamento persistente do servidor.' });
+    }
+  },
+);
 router.post('/products', async (req, res) => {
   const title = clean(req.body?.title, 255);
   const description = clean(req.body?.description, 5000);
@@ -110,7 +180,7 @@ router.post('/products', async (req, res) => {
   const imageUrl = clean(req.body?.imageUrl, 1000);
   const price = Number(req.body?.price);
   const stockUnits = Number(req.body?.stockUnits);
-  if (!title || !category || !Number.isFinite(price) || price <= 0 || !Number.isInteger(stockUnits) || stockUnits < 0) {
+  if (!title || !category || !SITE_CATEGORIES.includes(category) || !Number.isFinite(price) || price <= 0 || !Number.isInteger(stockUnits) || stockUnits < 0) {
     return res.status(400).json({ error: 'Informe título, categoria, preço e estoque válidos.' });
   }
 
@@ -141,7 +211,7 @@ router.patch('/products/:id', async (req, res) => {
   const price = Number(req.body?.price);
   const stockUnits = Number(req.body?.stockUnits);
   const status = ['ativo', 'pausado'].includes(req.body?.status) ? req.body.status : 'ativo';
-  if (!title || !category || !Number.isFinite(price) || price <= 0 || !Number.isInteger(stockUnits) || stockUnits < 0) {
+  if (!title || !category || !SITE_CATEGORIES.includes(category) || !Number.isFinite(price) || price <= 0 || !Number.isInteger(stockUnits) || stockUnits < 0) {
     return res.status(400).json({ error: 'Informe título, categoria, preço e estoque válidos.' });
   }
   try {
@@ -196,4 +266,5 @@ router.patch('/orders/:id', async (req, res) => {
 });
 
 export default router;
+
 

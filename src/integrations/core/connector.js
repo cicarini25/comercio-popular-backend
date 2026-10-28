@@ -16,3 +16,4 @@ export class MarketplaceConnector {
     throw new Error(`${this.name}: geração de link de afiliado não disponível neste conector.`);
   }
 }
+

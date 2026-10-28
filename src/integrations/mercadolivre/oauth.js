@@ -473,3 +473,4 @@ export async function getMercadoLivreConnectionStatus() {
     updatedAt: connection.updated_at
   };
 }
+

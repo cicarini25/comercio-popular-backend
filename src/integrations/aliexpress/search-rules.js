@@ -218,3 +218,4 @@ export function filterByAliExpressSearchRule(products, keywords = "") {
     filteredOut: candidates.length - relevant.length
   };
 }
+

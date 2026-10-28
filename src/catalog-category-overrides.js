@@ -12,21 +12,21 @@ export const COMPLETE_APPLIANCE_TITLE_PATTERNS = [
 ];
 
 export const MAPEAMENTO_GERAL_DE_CATEGORIAS = {
-  'notebook': 'Notebook',
-  'laptop': 'Notebook',
-  'macbook': 'Notebook',
-  'pc gamer': 'Computadores',
-  'computador gamer': 'Computadores',
-  'computador completo': 'Computadores',
-  'desktop': 'Computadores',
-  'cpu gamer': 'Computadores',
-  'intel core': 'Computadores',
-  'ryzen': 'Computadores',
-  'gabinete rgb': 'Computadores',
-  'ssd nvme': 'Computadores',
-  'memoria ram': 'Computadores',
-  'placa de video': 'Computadores',
-  'monitor led': 'Computadores'
+  'notebook': 'Informática',
+  'laptop': 'Informática',
+  'macbook': 'Informática',
+  'pc gamer': 'Informática',
+  'computador gamer': 'Informática',
+  'computador completo': 'Informática',
+  'desktop': 'Informática',
+  'cpu gamer': 'Informática',
+  'intel core': 'Informática',
+  'ryzen': 'Informática',
+  'gabinete rgb': 'Informática',
+  'ssd nvme': 'Informática',
+  'memoria ram': 'Informática',
+  'placa de video': 'Informática',
+  'monitor led': 'Informática'
 };
 
 export function corrigirCategoriaDoProdutoGeral(produto) {
@@ -40,3 +40,4 @@ export function corrigirCategoriaDoProdutoGeral(produto) {
   }
   return produto;
 }
+
