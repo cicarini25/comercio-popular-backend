@@ -2,6 +2,15 @@ import express from 'express';
 import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
+import {
+  ensureMarketplaceSchema,
+  getSellerAccessToken,
+  getSellerAccountBySellerId,
+  marketplaceFee,
+  sellerAmount,
+  splitEnabled,
+  verifyWebhookSignature,
+} from '../integrations/mercadopago/marketplace.js';
 
 const router = express.Router();
 
@@ -18,7 +27,7 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'O carrinho está vazio.' });
   }
 
-  if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+  if (!process.env.MERCADOPAGO_ACCESS_TOKEN && !splitEnabled()) {
     return res.status(503).json({ error: 'Pagamento ainda não configurado no servidor.' });
   }
 
@@ -38,6 +47,7 @@ router.post('/', requireAuth, async (req, res) => {
 
   const client = await pool.connect();
   try {
+    await ensureMarketplaceSchema();
     await client.query('BEGIN');
 
     const productIds = [...new Set(items.map((item) => item.productId).filter((id) => /^[0-9a-f-]{36}$/i.test(String(id))))];
@@ -67,6 +77,13 @@ router.post('/', requireAuth, async (req, res) => {
 
     const subtotal = canonicalItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
     const total = subtotal + normalizedShippingFee;
+    const sellerAccount = splitEnabled() ? await getSellerAccountBySellerId(sellerIds[0]) : null;
+    if (splitEnabled() && !sellerAccount) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Este vendedor ainda não conectou uma conta Mercado Pago para receber pagamentos.' });
+    }
+    const platformFee = splitEnabled() ? marketplaceFee(subtotal) : 0;
+    const sellerNet = sellerAmount(total, platformFee);
 
     const orderResult = await client.query(
       `INSERT INTO orders (user_id, subtotal, shipping_fee, total, status)
@@ -84,8 +101,10 @@ router.post('/', requireAuth, async (req, res) => {
       );
     }
 
-    // Cria a preferência de pagamento no Mercado Pago (Checkout Pro)
-    const preference = new Preference(mpClient);
+    // No split 1:1 o Checkout Pro é criado com o OAuth do vendedor.
+    const checkoutAccessToken = sellerAccount ? await getSellerAccessToken(sellerAccount) : process.env.MERCADOPAGO_ACCESS_TOKEN;
+    const preferenceClient = new MercadoPagoConfig({ accessToken: checkoutAccessToken });
+    const preference = new Preference(preferenceClient);
     const mpResponse = await preference.create({
       body: {
         items: canonicalItems.map((i) => ({
@@ -98,6 +117,7 @@ router.post('/', requireAuth, async (req, res) => {
           cost: normalizedShippingFee,
           mode: 'not_specified'
         },
+        ...(splitEnabled() ? { marketplace_fee: platformFee } : {}),
         external_reference: orderId,
         back_urls: {
           success: `${process.env.FRONTEND_URL}/pedido/${orderId}/sucesso`,
@@ -105,13 +125,13 @@ router.post('/', requireAuth, async (req, res) => {
           pending: `${process.env.FRONTEND_URL}/pedido/${orderId}/pendente`
         },
         auto_return: 'approved',
-        notification_url: `${process.env.BACKEND_PUBLIC_URL}/api/orders/webhook/mercadopago`
+        notification_url: `${process.env.BACKEND_PUBLIC_URL}/api/orders/webhook/mercadopago${splitEnabled() ? `?seller_id=${encodeURIComponent(sellerIds[0])}` : ''}`
       }
     });
 
     await client.query(
-      'UPDATE orders SET mp_preference_id = $1 WHERE id = $2',
-      [mpResponse.id, orderId]
+      'UPDATE orders SET mp_preference_id = $1, mp_seller_account_id = $2, marketplace_fee = $3 WHERE id = $4',
+      [mpResponse.id, sellerAccount?.id || null, platformFee, orderId]
     );
 
     await client.query('COMMIT');
@@ -119,7 +139,8 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json({
       orderId,
       checkoutUrl: mpResponse.init_point, // link para redirecionar o cliente ao pagamento
-      preferenceId: mpResponse.id
+      preferenceId: mpResponse.id,
+      split: splitEnabled() ? { enabled: true, marketplaceFee: platformFee, sellerNet } : { enabled: false },
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -152,10 +173,17 @@ router.get('/', requireAuth, async (req, res) => {
 // quando o status de um pagamento muda (aprovado, recusado, etc.)
 router.post('/webhook/mercadopago', async (req, res) => {
   try {
+    if (!verifyWebhookSignature(req)) return res.sendStatus(401);
     const { type, data } = req.body;
 
     if (type === 'payment') {
-      const payment = new Payment(mpClient);
+      let paymentClient = mpClient;
+      if (splitEnabled() && req.query.seller_id) {
+        const sellerAccount = await getSellerAccountBySellerId(req.query.seller_id);
+        if (!sellerAccount) return res.sendStatus(409);
+        paymentClient = new MercadoPagoConfig({ accessToken: await getSellerAccessToken(sellerAccount) });
+      }
+      const payment = new Payment(paymentClient);
       const paymentInfo = await payment.get({ id: data.id });
 
       const orderId = paymentInfo.external_reference;
@@ -176,7 +204,7 @@ router.post('/webhook/mercadopago', async (req, res) => {
     res.sendStatus(200); // o Mercado Pago exige resposta 200 rápida
   } catch (err) {
     console.error('Erro no webhook do Mercado Pago:', err);
-    res.sendStatus(200); // responde 200 mesmo assim, para o MP não ficar reenviando indefinidamente
+    res.sendStatus(500);
   }
 });
 

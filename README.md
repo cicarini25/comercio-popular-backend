@@ -8,6 +8,15 @@ API real que grava usuários e pedidos no banco de dados e processa pagamentos p
 - Criação de pedido no banco de dados
 - Geração do link de pagamento no Mercado Pago (Checkout Pro)
 - Webhook que atualiza o pedido automaticamente quando o pagamento é aprovado
+- Split 1:1 preparado com OAuth individual por vendedor, renovação criptografada de tokens e comissão configurável
+
+## Split de pagamentos Mercado Pago
+
+O split fica desativado por padrão (`MERCADOPAGO_SPLIT_ENABLED=false`). Quando habilitado, cada vendedor precisa conectar a própria conta Mercado Pago por OAuth no botão **Conectar conta** do painel. O checkout é criado com o token OAuth do vendedor e usa o modelo Split 1:1 do Checkout Pro.
+
+As regras atuais preservam o plano comercial do site: a comissão por venda começa em **0%**, a taxa fixa começa em **R$ 0,00**, e o frete é incluído no valor do vendedor porque é responsabilidade da loja. A taxa do Mercado Pago continua sendo descontada pelo próprio Mercado Pago. Qualquer alteração de comissão deve ser feita somente nas variáveis do backend, nunca aceita do navegador.
+
+Antes de ativar em produção, crie no Mercado Pago uma aplicação de Marketplace com Redirect URI apontando para `/api/mercadopago/marketplace/callback`, configure `MERCADOPAGO_CLIENT_ID`, `MERCADOPAGO_CLIENT_SECRET`, `MERCADOPAGO_REDIRECT_URI` e uma chave independente em `MERCADOPAGO_OAUTH_ENCRYPTION_KEY`. Depois configure a assinatura de Webhooks em `MERCADOPAGO_WEBHOOK_SECRET`, teste com contas de teste e só então altere `MERCADOPAGO_SPLIT_ENABLED=true` e `MERCADOPAGO_REQUIRE_WEBHOOK_SIGNATURE=true` no Railway.
 
 ## O que ainda falta (próxima etapa)
 - Conectar essas rotas no site (front-end) no lugar da simulação atual

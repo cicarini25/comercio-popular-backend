@@ -29,6 +29,27 @@ CREATE TABLE IF NOT EXISTS sellers (
   created_at      TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS mercadopago_seller_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  seller_id         UUID NOT NULL UNIQUE REFERENCES sellers(id) ON DELETE CASCADE,
+  mp_user_id        VARCHAR(80) NOT NULL UNIQUE,
+  public_key        VARCHAR(255),
+  access_token      TEXT NOT NULL,
+  refresh_token     TEXT NOT NULL,
+  token_expires_at  TIMESTAMPTZ NOT NULL,
+  scope             VARCHAR(255),
+  live_mode         BOOLEAN NOT NULL DEFAULT FALSE,
+  status            VARCHAR(30) NOT NULL DEFAULT 'connected',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mercadopago_oauth_states (
+  state_hash  VARCHAR(64) PRIMARY KEY,
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at  TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS products (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   seller_id       UUID REFERENCES sellers(id) ON DELETE SET NULL,
@@ -55,6 +76,8 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_method    VARCHAR(30),
   mp_preference_id  VARCHAR(150),
   mp_payment_id     VARCHAR(150),
+  mp_seller_account_id UUID REFERENCES mercadopago_seller_accounts(id) ON DELETE SET NULL,
+  marketplace_fee   NUMERIC(10,2) NOT NULL DEFAULT 0,
   tracking_code     VARCHAR(50),
   created_at        TIMESTAMPTZ DEFAULT now(),
   updated_at        TIMESTAMPTZ DEFAULT now()

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
+import { verifyWebhookSignature } from '../integrations/mercadopago/marketplace.js';
 
 const router = express.Router();
 let schemaReady;
@@ -345,6 +346,7 @@ router.patch('/:id/review', requireAuth, requireAdmin, async (req, res) => {
 
 router.post('/webhook/mercadopago', async (req, res) => {
   try {
+    if (!verifyWebhookSignature(req)) return res.sendStatus(401);
     const type = req.body?.type || req.body?.topic;
     const subscriptionId = req.body?.data?.id || req.body?.id;
     if (type === 'subscription_preapproval' && subscriptionId && process.env.MERCADOPAGO_ACCESS_TOKEN) {
@@ -364,9 +366,8 @@ router.post('/webhook/mercadopago', async (req, res) => {
     return res.sendStatus(200);
   } catch (error) {
     console.error('Erro no webhook de assinatura do Mercado Pago:', error);
-    return res.sendStatus(200);
+    return res.sendStatus(500);
   }
 });
 
 export default router;
-
