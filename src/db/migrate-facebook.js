@@ -6,3 +6,4 @@ try {
   console.log('Migração Facebook concluída.');
 } catch { console.error('Falha na migração Facebook. Confira DATABASE_URL e acesso ao banco.'); process.exitCode = 1; }
 finally { await pool.end(); }
+

@@ -50,3 +50,4 @@ export function buildNormalizedProduct(product) {
     attributes: Object.fromEntries(attributeEntries)
   };
 }
+

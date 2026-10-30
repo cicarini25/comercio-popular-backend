@@ -152,3 +152,4 @@ export function hasEnoughIdentity(product) {
     tokenize(normalized.title).length >= 2
   );
 }
+

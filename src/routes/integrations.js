@@ -10,6 +10,7 @@ import { importAliExpressProducts, MAX_IMPORT_ITEMS as MAX_ALIEXPRESS_IMPORT_ITE
 import { normalizeShopeeBulkItems, MAX_BULK_ITEMS } from "../integrations/shopee/bulk-importer.js";
 import { resolveShopeeImages } from "../integrations/shopee/image-resolver.js";
 import { getShopeeSuggestedCategorySignals, normalizeShopeeSiteCategory, resolveShopeeSiteCategory } from "../integrations/shopee/category-resolver.js";
+import { SITE_CATEGORIES } from "../integrations/core/site-category-resolver.js";
 import {
   buildMercadoLivreAuthorizationUrl,
   createMercadoLivreOAuthState,
@@ -363,7 +364,7 @@ router.post("/shopee/reclassify-import-jobs-to-category", requireIntegrationAdmi
           AND ci.product_id IS NOT NULL
           AND (
             ci.job_id = ANY($1::uuid[])
-            OR p.category IN ('Ferramentas', 'Computadores', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'Moda Infantil')
+            OR p.category IN ('Ferramentas', 'Informática', 'Smartphones', 'Casa & Cozinha', 'TVs', 'Moda Feminina', 'Pets', 'MÁQUINAS & IMPRESSORAS', 'Moda Infantil')
           )
         ORDER BY p.id, ci.created_at DESC`,
       [jobIds]
@@ -624,7 +625,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
       let matchedBy = "sem alteração";
       if (isTelevision && categoryKey === "computadores") { suggestedCategory = "TVs"; matchedBy = "televisor"; }
       else if (isTvFurniture && categoryKey === "tvs") { suggestedCategory = "Móveis"; matchedBy = "painel/rack para TV"; }
-      else if (isComputerDecoration || (categoryKey === "tvs" && isComputerMonitor)) { suggestedCategory = "Computadores"; matchedBy = "monitor/acessório de computador"; }
+      else if (isComputerDecoration || (categoryKey === "tvs" && isComputerMonitor)) { suggestedCategory = "Informática"; matchedBy = "monitor/acessório de computador"; }
       else if (isLaser) { suggestedCategory = "MÁQUINAS & IMPRESSORAS"; matchedBy = "gravadora/acessório de laser"; }
       else if (isTool && (isMachineCategory || isCraftCategory)) { suggestedCategory = "Ferramentas"; matchedBy = "ferramenta"; }
       else if (categoryKey === "moda feminina" && isSewingSupply && (!isWomensClothing || isStrongSewingSupply)) { suggestedCategory = "ARMARINHOS & TRICÔ"; matchedBy = "material de costura/tricô"; }
@@ -762,16 +763,7 @@ router.post("/shopee/reclassify-import-jobs-auto-categories", requireIntegration
 router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin, async (req, res) => {
   const jobPrefix = typeof req.body?.jobPrefix === "string" ? req.body.jobPrefix.trim() : "";
   const targetCategory = typeof req.body?.targetCategory === "string" ? req.body.targetCategory.trim() : "";
-  const allowedCategories = new Set([
-    "Utilidades", "Casa & Cozinha", "Ferramentas", "Eletrodomésticos",
-    "ELETRO & ACESSÓRIOS", "Móveis", "ELETRÔNICOS", "RELÓGIOS", "Games",
-    "Computadores", "Notebook", "Smartphones", "Acessórios para celulares",
-    "Aparelhos de Som", "Fones & Headphones", "Instrumentos Musicais",
-    "AUTO & ACESSÓRIOS", "MOTOS & ACESSÓRIOS", "Pets", "Moda Masculina",
-    "Moda Feminina", "Moda Infantil", "ARMARINHOS & TRICÔ", "Brinquedos",
-    "TVs", "Calçados", "Esportes & Lazer", "Bike Elétrica e Acessórios",
-    "Cuidado & Beleza", "Alimentos & Bebidas", "MÁQUINAS & IMPRESSORAS"
-  ]);
+  const allowedCategories = new Set(SITE_CATEGORIES);
   if (!/^[a-f0-9]{8}$/i.test(jobPrefix)) {
     return res.status(400).json({ error: "Informe os 8 primeiros caracteres do ID do lote." });
   }
@@ -914,7 +906,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
              WHEN lower(p.title) LIKE '%luminária%'
                OR lower(p.title) LIKE '%luminaria%'
                OR lower(p.title) LIKE '%abajur%'
-               THEN 'Utilidades'
+               THEN 'LUMINÁRIAS'
              WHEN (lower(p.title) LIKE '%caminhão%' OR lower(p.title) LIKE '%caminhao%')
                AND lower(p.title) LIKE '%controle%remoto%'
                THEN 'Brinquedos'
@@ -976,7 +968,7 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
         WHERE ci.job_id = $1
           AND ci.product_id = p.id
           AND (
-            p.category = 'Utilidades' AND (
+            p.category = 'LUMINÁRIAS' AND (
               lower(p.title) LIKE '%luminária%'
               OR lower(p.title) LIKE '%luminaria%'
               OR lower(p.title) LIKE '%abajur%'
@@ -989,13 +981,13 @@ router.post("/shopee/reclassify-import-job-categories", requireIntegrationAdmin,
     );
 
     await client.query("COMMIT");
-    const utilidades = updated.rows.filter((row) => row.category === "Utilidades").length;
+    const luminarias = updated.rows.filter((row) => row.category === "LUMINÁRIAS").length;
     const brinquedos = updated.rows.filter((row) => row.category === "Brinquedos").length;
     return res.json({
       ok: true,
       jobPrefix,
       updatedCount: updated.rows.length,
-      utilidades,
+      luminarias,
       brinquedos,
       changed: updated.rows
     });
@@ -1643,7 +1635,7 @@ router.post("/shopee/reclassify-misplaced-computer-products", requireIntegration
   const sourceCategories = Array.isArray(req.body?.sourceCategories)
     ? req.body.sourceCategories.filter((value) => typeof value === "string").map((value) => value.trim()).filter(Boolean)
     : ["AUTO & ACESSÓRIOS", "Pets"];
-  const targetCategory = "Computadores";
+  const targetCategory = "Informática";
   const dryRun = req.body?.dryRun !== false;
   if (!sourceCategories.length || sourceCategories.length > 10) {
     return res.status(400).json({ error: "Informe as categorias de origem para analisar." });
@@ -1808,7 +1800,7 @@ router.post("/shopee/reclassify-misplaced-electro-accessories", requireIntegrati
 
 
 router.post("/shopee/reclassify-misplaced-pet-products", requireIntegrationAdmin, async (req, res) => {
-  const sourceCategory = "Computadores";
+  const sourceCategory = "Informática";
   const targetCategory = "Pets";
   const dryRun = req.body?.dryRun !== false;
   const client = await pool.connect();
@@ -1880,3 +1872,5 @@ router.post("/shopee/reclassify-misplaced-pet-products", requireIntegrationAdmin
 });
 
 export default router;
+
+

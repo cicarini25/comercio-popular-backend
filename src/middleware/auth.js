@@ -15,3 +15,4 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Sessão expirada ou inválida. Faça login novamente.' });
   }
 }
+

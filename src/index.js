@@ -86,6 +86,7 @@ app.use('/api/merchant-applications', merchantApplicationRoutes);
 app.use('/api/seller', sellerRoutes);
 app.use('/api/catalog', catalogRoutes);
 app.use('/shopee-images', express.static('/data/shopee-images', { maxAge: '7d', fallthrough: false }));
+app.use('/product-media/videos', express.static(process.env.PRODUCT_VIDEO_STORAGE_DIR || '/data/shopee-images/product-videos', { maxAge: '7d', immutable: true, fallthrough: false }));
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/integrations/shopee-images', shopeeImageRoutes);
 
@@ -93,3 +94,5 @@ const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
   console.log(`Comércio Popular API rodando na porta ${PORT}`);
 });
+
+
