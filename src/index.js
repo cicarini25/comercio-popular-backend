@@ -13,6 +13,7 @@ import smsRoutes from './routes/sms.js';
 import catalogRoutes from './routes/catalog.js';
 import integrationRoutes from './routes/integrations.js';
 import shopeeImageRoutes from './routes/shopee-images.js';
+import prometheusRoutes from './routes/prometheus.js';
 import { completeMercadoLivreOAuth } from './integrations/mercadolivre/oauth.js';
 import { authRateLimit } from './middleware/auth-rate-limit.js';
 
@@ -89,6 +90,7 @@ app.use('/shopee-images', express.static('/data/shopee-images', { maxAge: '7d', 
 app.use('/product-media/videos', express.static(process.env.PRODUCT_VIDEO_STORAGE_DIR || '/data/shopee-images/product-videos', { maxAge: '7d', immutable: true, fallthrough: false }));
 app.use('/api/integrations', integrationRoutes);
 app.use('/api/integrations/shopee-images', shopeeImageRoutes);
+app.use('/api/prometheus', prometheusRoutes);
 
 const PORT = process.env.PORT || 3333;
 app.listen(PORT, () => {
